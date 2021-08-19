@@ -1,0 +1,97 @@
+{
+  "nodes": {
+    "flake-compat": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1627913399,
+        "narHash": "sha256-hY8g6H2KFL8ownSiFeMOjwPC8P0ueXpCVEbxgda3pko=",
+        "owner": "edolstra",
+        "repo": "flake-compat",
+        "rev": "12c64ca55c1014cdc1b16ed5a804aa8576601ff2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "edolstra",
+        "repo": "flake-compat",
+        "type": "github"
+      }
+    },
+    "flake-utils": {
+      "locked": {
+        "lastModified": 1629284811,
+        "narHash": "sha256-JHgasjPR0/J1J3DRm4KxM4zTyAj4IOJY8vIl75v/kPI=",
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "rev": "c5d161cc0af116a2e17f54316f0bf43f0819785c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "type": "github"
+      }
+    },
+    "mozillapkgs": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1629225446,
+        "narHash": "sha256-HJX4Pc5ZUAg4apxB/XHuJ+6ukzvRQqeZMjscOBst2bA=",
+        "owner": "mozilla",
+        "repo": "nixpkgs-mozilla",
+        "rev": "0510159186dd2ef46e5464484fbdf119393afa58",
+        "type": "github"
+      },
+      "original": {
+        "owner": "mozilla",
+        "repo": "nixpkgs-mozilla",
+        "type": "github"
+      }
+    },
+    "naersk": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1629347363,
+        "narHash": "sha256-YKdcIp1qqfQlAmopbbtSad8r4RTnxW619tZnegARkHw=",
+        "owner": "dpc",
+        "repo": "naersk",
+        "rev": "0d40a7ff2c3cb8487680cc962f75ac3db24253f4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "dpc",
+        "repo": "naersk",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1629351150,
+        "narHash": "sha256-EFj4xK3H1p51NgIYsGdw4HVOk7flOuQqgJIwOr4pIRc=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "9a3d985c2cc1e82c50534334003972ea0a278cd4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "flake-compat": "flake-compat",
+        "flake-utils": "flake-utils",
+        "mozillapkgs": "mozillapkgs",
+        "naersk": "naersk",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
