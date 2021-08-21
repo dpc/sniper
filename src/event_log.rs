@@ -2,9 +2,28 @@ use anyhow::Result;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub enum Event {}
+use crate::service;
 
 pub type EventId = String;
+pub type EventIdRef<'a> = &'a str;
+
+
+// TODO: This type makes everything cyclical:
+// All services depend on it, and it depends
+// on events of each of the services. Not a
+// big deal for this small program, but something
+// to take care of in a more realistic implementation.
+pub enum EventDetails {
+    AuctionHouse(service::auction::Event),
+    BiddingEngine(service::bidding_engine::Event),
+    Ui,
+}
+
+pub struct Event {
+    pub id: EventId,
+    pub details: EventDetails,
+}
+
 
 pub trait Reader {
     fn read(
@@ -16,7 +35,7 @@ pub trait Reader {
 }
 
 pub trait Writer {
-    fn write(&self, events: &[Event]) -> Result<()>;
+    fn write(&self, events: &[EventDetails]) -> Result<()>;
 }
 
 pub type SharedReader = Arc<dyn Reader + Sync + Send + 'static>;
