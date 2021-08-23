@@ -1,16 +1,21 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::auction::{Amount, BidDetails, Bid, ItemIdRef};
+use super::bidding_engine;
+use crate::auction::{Amount, BidDetails, ItemId, ItemIdRef};
 use crate::event_log;
 use anyhow::Result;
 
 use super::JoinHandle;
 
-pub enum Event {
-    Bid(Bid),
-    Lost,
-    Won,
+pub struct Event {
+    pub item: ItemId,
+    pub event: EventDetails,
+}
+
+pub enum EventDetails {
+    Bid(BidDetails),
+    Closed,
 }
 
 pub trait AuctionHouseClient {
@@ -35,20 +40,30 @@ impl Service {
         even_writer: event_log::SharedWriter,
         auction_house_client: SharedAuctionHouseClient,
     ) -> Self {
-        let reader_thread = svc_ctl.spawn_loop(move || {
-            if let Some(event) = auction_house_client.poll(Some(Duration::from_secs(1)))? {
-                even_writer.write(
-                    &[event_log::EventDetails::AuctionHouse(event)])?;
-            }
+        let reader_thread = svc_ctl.spawn_loop({
+            let auction_house_client = auction_house_client.clone();
+            move || {
+                if let Some(event) = auction_house_client.poll(Some(Duration::from_secs(1)))? {
+                    even_writer.write(&[event_log::EventDetails::AuctionHouse(event)])?;
+                }
 
-            Ok(())
+                Ok(())
+            }
         });
 
         let writer_thread = svc_ctl.spawn_event_loop(
             progress_store.clone(),
             WRITER_ID,
             event_reader,
-            move |event| todo!(),
+            move |event| match event {
+                event_log::EventDetails::BiddingEngine(event) => match event {
+                    bidding_engine::Event::Bid(item_bid) => {
+                        auction_house_client.place_bid(&item_bid.item, item_bid.price)
+                    }
+                    _ => Ok(()),
+                },
+                _ => Ok(()),
+            },
         );
 
         Self {

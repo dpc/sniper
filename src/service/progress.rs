@@ -1,5 +1,5 @@
-use super::{ServiceIdRef, ServiceId};
-use crate::event_log::{EventIdRef, EventId};
+use super::{ServiceId, ServiceIdRef};
+use crate::event_log::{EventId, EventIdRef};
 
 use anyhow::Result;
 use std::collections::BTreeMap;
@@ -31,7 +31,10 @@ impl InMemoryProgressTracker {
 
 impl ProgressTracker for InMemoryProgressTracker {
     fn store(&self, id: ServiceIdRef, event_id: EventIdRef) -> Result<()> {
-        self.store.lock().expect("lock").insert(id.to_owned(), event_id.to_owned());
+        self.store
+            .lock()
+            .expect("lock")
+            .insert(id.to_owned(), event_id.to_owned());
         Ok(())
     }
     fn load(&self, id: ServiceIdRef) -> Result<Option<EventId>> {

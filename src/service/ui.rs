@@ -1,5 +1,5 @@
+use crate::auction::ItemBid;
 
 pub enum Event {
-    BiddingRequest,
-
+    MaxBidSet(ItemBid),
 }

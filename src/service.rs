@@ -1,6 +1,7 @@
-pub mod auction;
-pub mod progress;
+pub mod auction_house;
 pub mod bidding_engine;
+pub mod progress;
+pub mod ui;
 
 use anyhow::format_err;
 use anyhow::Result;
@@ -22,11 +23,16 @@ pub type ServiceIdRef<'a> = &'a str;
 /// All services are basically a loop, and we would like to be able to
 /// gracefully terminate them, and handle and top-level error of any
 /// of them by stopping everything.
+#[derive(Default, Clone)]
 pub struct ServiceControl {
     stop: Arc<AtomicBool>,
 }
 
 impl ServiceControl {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
     /// Start a new service as a loop, with a certain body
     ///
     /// This will take care of checking termination condition and
