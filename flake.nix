@@ -36,8 +36,10 @@
         # date = "2020-01-01"; # get the current date with `date -I`
         # channel = "stable";
         # sha256 = "2NfCJiH3wk7sR1XlRf8+IZfY3S9sYKdL8TpMqk82Bq0=";
-        channel = "beta";
-        sha256 = "sha256-x7ljos+NgzB7+JU1OS/tFm2Ft6QigHOmhJ8fg9jcZyQ=";
+        # channel = "beta";
+        # sha256 = "sha256-x7ljos+NgzB7+JU1OS/tFm2Ft6QigHOmhJ8fg9jcZyQ=";
+        channel = "nightly";
+        sha256 = "AgR5wPY/EbZd+bMo/Yx5/wJZm5j8egSRTWlviTyJLQo=";
       });
       rust = channel.rust;
 
@@ -59,21 +61,10 @@
           nativeBuildInputs = (with pkgs;
             [
               pkgconfig
-              # nixpkgs-fmt
-              # cargo-watch
               rust-analyzer
-              # rustc
-              # cargo
               rust
             ]);
           RUST_SRC_PATH = "${channel.rust-src}/lib/rustlib/src/rust/library";
         };
-
-        # devShell =
-        # # pkgs.mkShell { buildInputs = [ self.packages.${system}.rdedup ]; };
-        # pkgs.mkShell {
-        #   nativeBuildInputs = [ fenix.packages.${system}.stable.rustc ];
-        #   buildInputs = with pkgs; [ pkgconfig libsodium lzma openssl fenix.packages.x86_64-linux.rust-analyzer ];
-        # };
   });
 }

@@ -11,6 +11,8 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
+mod postgres;
+
 /// A store for the current state of each auction we participate in
 pub trait BiddingStateStore {
     fn load(&self, item_id: ItemIdRef) -> Result<Option<AuctionBiddingState>>;
@@ -19,9 +21,9 @@ pub trait BiddingStateStore {
 
 pub type SharedBiddingStateStore = Arc<dyn BiddingStateStore + Send + Sync>;
 
-pub struct InMemoryProgressTracker(Mutex<BTreeMap<ItemId, AuctionBiddingState>>);
+pub struct InMemoryBiddingStateStore(Mutex<BTreeMap<ItemId, AuctionBiddingState>>);
 
-impl InMemoryProgressTracker {
+impl InMemoryBiddingStateStore {
     pub fn new() -> Self {
         Self(Mutex::new(BTreeMap::default()))
     }
@@ -31,7 +33,7 @@ impl InMemoryProgressTracker {
     }
 }
 
-impl BiddingStateStore for InMemoryProgressTracker {
+impl BiddingStateStore for InMemoryBiddingStateStore {
     fn load(&self, item_id: ItemIdRef) -> Result<Option<AuctionBiddingState>> {
         Ok(self.0.lock().expect("lock").get(item_id).cloned())
     }
