@@ -1,15 +1,28 @@
+//! Database persistence traitsi
+//!
+//! OK, so this one is complex. Expressing atomic transactions
+//! spaning accross multiple stores/repositories in hexagonal
+//! architecture is not a simple thing in any language.
 pub mod postgres;
 
+use std::sync::Arc;
 use anyhow::Result;
+use anyhow::bail;
 
-pub trait Persistence {
+/// An instance of a persistence (store) that can hold data
+pub trait Persistence : Send + Sync {
     type Connection: Connection;
 
+    /// Get a connection to a store
     fn get_connection(&self) -> Result<Self::Connection>;
 }
 
+pub type SharedPersistence<C> = Arc<dyn Persistence<Connection=C> + Send + Sync + 'static>;
+
+/// Trait unifying `Connection` and `Transaction` under one umbrealla
 pub trait GenericConnection {}
 
+/// A connection to a database/persistence
 pub trait Connection: GenericConnection {
     type Transaction<'a>: Transaction
     where
@@ -17,8 +30,10 @@ pub trait Connection: GenericConnection {
     fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>>;
 }
 
+/// A database transaction to a database/persistence
 pub trait Transaction: GenericConnection {
-    fn commit(&mut self) -> Result<()>;
+    fn commit(self) -> Result<()>;
+    fn rollback(self) -> Result<()>;
 }
 
 #[derive(Default, Debug)]
@@ -51,7 +66,11 @@ pub struct InMemoryTransaction;
 impl GenericConnection for InMemoryTransaction {}
 
 impl Transaction for InMemoryTransaction {
-    fn commit(&mut self) -> Result<()> {
+    fn commit(self) -> Result<()> {
         Ok(())
+    }
+
+    fn rollback(self) -> Result<()> {
+        bail!("Not supported")
     }
 }

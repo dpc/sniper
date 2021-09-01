@@ -14,7 +14,7 @@ impl Persistence for PostgresPersistence {
 }
 
 pub struct PostgresConnection {
-    client: r2d2::PooledConnection<r2d2_postgres::PostgresConnectionManager<r2d2_postgres::postgres::NoTls>>,
+    pub client: r2d2::PooledConnection<r2d2_postgres::PostgresConnectionManager<r2d2_postgres::postgres::NoTls>>,
 }
 
 impl GenericConnection for PostgresConnection {}
@@ -36,7 +36,11 @@ pub struct PostgresTransaction<'a> {
 impl<'a> GenericConnection for PostgresTransaction<'a> {}
 
 impl<'a> Transaction for PostgresTransaction<'a> {
-    fn commit(&mut self) -> Result<()> {
-        Ok(())
+    fn commit(self) -> Result<()> {
+        Ok(self.transaction.commit()?)
+    }
+
+    fn rollback(self) -> Result<()> {
+        Ok(self.transaction.rollback()?)
     }
 }

@@ -36,6 +36,7 @@ pub const WRITER_ID: &'static str = "auction-house-reader";
 impl Service {
     fn new<P>(
         svc_ctl: super::ServiceControl,
+        persistence: P,
         progress_store: super::progress::SharedProgressTracker,
         event_reader: event_log::SharedReader<P>,
         even_writer: event_log::SharedWriter<P>,
@@ -53,10 +54,11 @@ impl Service {
         });
 
         let writer_thread = svc_ctl.spawn_event_loop(
+            persistence,
             progress_store.clone(),
             WRITER_ID,
             event_reader,
-            move |event| match event {
+            move |transaction, event| match event {
                 event_log::EventDetails::BiddingEngine(event) => match event {
                     bidding_engine::Event::Bid(item_bid) => {
                         auction_house_client.place_bid(&item_bid.item, item_bid.price)

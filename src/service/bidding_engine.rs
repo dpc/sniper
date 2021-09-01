@@ -16,11 +16,33 @@ mod postgres;
 
 /// A store for the current state of each auction we participate in
 pub trait BiddingStateStore {
-    fn load(&self, item_id: ItemIdRef) -> Result<Option<AuctionBiddingState>>;
-    fn store(&self, item_id: ItemIdRef, state: AuctionBiddingState) -> Result<()>;
+    type Persistence: persistence::Persistence;
+    fn load(
+        &self,
+        conn: &mut <<Self as BiddingStateStore>::Persistence as persistence::Persistence>::Connection,
+        item_id: ItemIdRef,
+    ) -> Result<Option<AuctionBiddingState>>;
+    fn store(
+        &self,
+        conn: &mut <<Self as BiddingStateStore>::Persistence as persistence::Persistence>::Connection,
+        item_id: ItemIdRef,
+        state: AuctionBiddingState,
+    ) -> Result<()>;
+
+    fn load_tr<'a>(
+        &self,
+        conn: &mut <<<Self as BiddingStateStore>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        item_id: ItemIdRef,
+    ) -> Result<Option<AuctionBiddingState>>;
+    fn store_tr<'a>(
+        &self,
+        conn: &mut <<<Self as BiddingStateStore>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        item_id: ItemIdRef,
+        state: AuctionBiddingState,
+    ) -> Result<()>;
 }
 
-pub type SharedBiddingStateStore = Arc<dyn BiddingStateStore + Send + Sync>;
+pub type SharedBiddingStateStore<P> = Arc<dyn BiddingStateStore<Persistence = P> + Send + Sync>;
 
 pub struct InMemoryBiddingStateStore(Mutex<BTreeMap<ItemId, AuctionBiddingState>>);
 
@@ -29,17 +51,49 @@ impl InMemoryBiddingStateStore {
         Self(Mutex::new(BTreeMap::default()))
     }
 
-    pub fn new_shared() -> SharedBiddingStateStore {
+    pub fn new_shared() -> SharedBiddingStateStore<persistence::InMemoryPersistence> {
         Arc::new(Self::new())
     }
 }
 
 impl BiddingStateStore for InMemoryBiddingStateStore {
-    fn load(&self, item_id: ItemIdRef) -> Result<Option<AuctionBiddingState>> {
+    type Persistence = persistence::InMemoryPersistence;
+
+    fn load(
+        &self,
+        conn: &mut persistence::InMemoryConnection,
+        item_id: ItemIdRef,
+    ) -> Result<Option<AuctionBiddingState>> {
         Ok(self.0.lock().expect("lock").get(item_id).cloned())
     }
 
-    fn store(&self, item_id: ItemIdRef, state: AuctionBiddingState) -> Result<()> {
+    fn store(
+        &self,
+        conn: &mut persistence::InMemoryConnection,
+        item_id: ItemIdRef,
+        state: AuctionBiddingState,
+    ) -> Result<()> {
+        self.0
+            .lock()
+            .expect("lock")
+            .insert(item_id.to_owned(), state);
+        Ok(())
+    }
+
+    fn load_tr<'a>(
+        &self,
+        conn: &mut persistence::InMemoryTransaction,
+        item_id: ItemIdRef,
+    ) -> Result<Option<AuctionBiddingState>> {
+        Ok(self.0.lock().expect("lock").get(item_id).cloned())
+    }
+
+    fn store_tr<'a>(
+        &self,
+        conn: &mut persistence::InMemoryTransaction,
+        item_id: ItemIdRef,
+        state: AuctionBiddingState,
+    ) -> Result<()> {
         self.0
             .lock()
             .expect("lock")
@@ -224,8 +278,9 @@ pub struct Service {
 impl Service {
     pub fn new<P>(
         svc_ctl: &super::ServiceControl,
+        persistence: P,
         progress_store: super::progress::SharedProgressTracker,
-        bidding_state_store: SharedBiddingStateStore,
+        bidding_state_store: SharedBiddingStateStore<P>,
         event_reader: event_log::SharedReader<P>,
         even_writer: event_log::SharedWriter<P>,
     ) -> Self
@@ -233,19 +288,22 @@ impl Service {
         P: persistence::Persistence + 'static,
     {
         let thread = svc_ctl.spawn_event_loop(
+            persistence,
             progress_store.clone(),
             BIDDING_ENGINE_SERVICE_ID,
             event_reader,
-            move |event_details| {
+            move |transaction, event_details| {
                 Ok(match event_details {
                     event_log::EventDetails::AuctionHouse(event) => Self::handle_auction_event(
-                        &bidding_state_store,
+                        transaction,
+                        todo!(),
                         &even_writer,
                         event.item,
                         event.event,
                     )?,
                     event_log::EventDetails::Ui(ui::Event::MaxBidSet(item_bid)) => {
                         Self::handle_new_max_bid(
+                            transaction,
                             &bidding_state_store,
                             &even_writer,
                             item_bid.item,
@@ -259,8 +317,9 @@ impl Service {
         Self { thread }
     }
 
-    fn handle_auction_event<P>(
-        bidding_state_store: &SharedBiddingStateStore,
+    fn handle_auction_event<'a, P>(
+        transaction: &mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        bidding_state_store: &mut dyn BiddingStateStore<Persistence = P>,
         event_writer: &event_log::SharedWriter<P>,
         item_id: ItemId,
         event: crate::service::auction_house::EventDetails,
@@ -268,12 +327,12 @@ impl Service {
     where
         P: persistence::Persistence + 'static,
     {
-        if let Some(auction_state) = bidding_state_store.load(&item_id)? {
+        if let Some(auction_state) = bidding_state_store.load_tr(transaction, &item_id)? {
             let new_state = auction_state.handle_auction_event(event);
 
             if new_state != auction_state {
                 // TODO: wrap everything in a db transaction
-                bidding_state_store.store(&item_id, auction_state)?;
+                bidding_state_store.store_tr(transaction, &item_id, auction_state)?;
 
                 if let Some(our_bid) = new_state.state.get_next_bid(new_state.max_bid) {
                     event_writer.write(&[event_log::EventDetails::BiddingEngine(Event::Bid(
@@ -294,8 +353,9 @@ impl Service {
         Ok(())
     }
 
-    fn handle_new_max_bid<P>(
-        bidding_state_store: &SharedBiddingStateStore,
+    fn handle_new_max_bid<'a, P>(
+        transaction: &mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        bidding_state_store: &SharedBiddingStateStore<P>,
         event_writer: &event_log::SharedWriter<P>,
         item_id: ItemId,
         price: Amount,
@@ -304,7 +364,7 @@ impl Service {
         P: persistence::Persistence,
     {
         let auction_state = bidding_state_store
-            .load(&item_id)?
+            .load_tr(transaction, &item_id)?
             .unwrap_or_else(Default::default);
 
         let new_state = auction_state.handle_new_max_bid(price);
@@ -317,7 +377,7 @@ impl Service {
                 .unwrap_or(true)
         {
             // TODO: wrap everything in a db transaction
-            bidding_state_store.store(&item_id, auction_state)?;
+            bidding_state_store.store_tr(transaction, &item_id, auction_state)?;
 
             if let Some(our_bid) = new_state.state.get_next_bid(new_state.max_bid) {
                 event_writer.write(&[event_log::EventDetails::BiddingEngine(Event::Bid(

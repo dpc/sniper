@@ -4,6 +4,8 @@ pub mod progress;
 pub mod ui;
 
 use crate::persistence;
+use crate::persistence::Connection;
+use crate::persistence::Transaction;
 use anyhow::format_err;
 use anyhow::Result;
 use std::sync::{
@@ -58,13 +60,14 @@ impl ServiceControl {
 
     pub fn spawn_event_loop<F, P>(
         &self,
+        persistence: P,
         progress_store: SharedProgressTracker,
         service_id: ServiceIdRef,
         event_reader: event_log::SharedReader<P>,
         mut f: F,
     ) -> JoinHandle
     where
-        F: FnMut(event_log::EventDetails) -> Result<()> + Send + Sync + 'static,
+        F: for <'a> FnMut(&mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>, event_log::EventDetails) -> Result<()> + Send + Sync + 'static,
         P: persistence::Persistence + 'static,
     {
         let service_id = service_id.to_owned();
@@ -75,15 +78,20 @@ impl ServiceControl {
         };
 
         self.spawn_loop(move || {
+
+            let mut connection = persistence.get_connection()?;
+            let mut transaction = connection.start_transaction()?;
+
             for event in event_reader
                 .read(progress.clone(), 1, Some(std::time::Duration::from_secs(1)))?
                 .drain(..)
             {
-                f(event.details)?;
+                f(&mut transaction, event.details)?;
 
                 progress = Some(event.id.clone());
                 progress_store.store(&service_id, &event.id)?;
             }
+            transaction.commit()?;
             Ok(())
         })
     }

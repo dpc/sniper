@@ -9,6 +9,7 @@ mod persistence;
 
 fn main() {
     let (event_writer, event_reader) = event_log::new_in_memory_shared();
+    let persistence = persistence::InMemoryPersistence{};
     let progress_store = service::progress::InMemoryProgressTracker::new_shared();
     let bidding_state_store = service::bidding_engine::InMemoryBiddingStateStore::new_shared();
 
@@ -16,6 +17,7 @@ fn main() {
 
     let _bidding_engine = service::bidding_engine::Service::new(
         &svc_ctr,
+        persistence,
         progress_store.clone(),
         bidding_state_store,
         event_reader,
