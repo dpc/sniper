@@ -13,12 +13,11 @@ fn main() {
     let progress_store = service::progress::InMemoryProgressTracker::new_shared();
     let bidding_state_store = service::bidding_engine::InMemoryBiddingStateStore::new_shared();
 
-    let svc_ctr = service::ServiceControl::new();
+    let svc_ctr = service::ServiceControl::new(progress_store);
 
     let _bidding_engine = service::bidding_engine::Service::new(
         &svc_ctr,
         persistence,
-        progress_store.clone(),
         bidding_state_store,
         event_reader,
         event_writer,

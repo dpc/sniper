@@ -37,7 +37,6 @@ impl Service {
     fn new<P>(
         svc_ctl: super::ServiceControl,
         persistence: P,
-        progress_store: super::progress::SharedProgressTracker,
         event_reader: event_log::SharedReader<P>,
         even_writer: event_log::SharedWriter<P>,
         auction_house_client: SharedAuctionHouseClient,
@@ -55,7 +54,6 @@ impl Service {
 
         let writer_thread = svc_ctl.spawn_event_loop(
             persistence,
-            progress_store.clone(),
             WRITER_ID,
             event_reader,
             move |transaction, event| match event {

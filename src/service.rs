@@ -26,14 +26,18 @@ pub type ServiceIdRef<'a> = &'a str;
 /// All services are basically a loop, and we would like to be able to
 /// gracefully terminate them, and handle and top-level error of any
 /// of them by stopping everything.
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct ServiceControl {
     stop: Arc<AtomicBool>,
+    progress_store: progress::SharedProgressTracker,
 }
 
 impl ServiceControl {
-    pub fn new() -> Self {
-        Default::default()
+    pub fn new(progress_store: progress::SharedProgressTracker) -> Self {
+        Self {
+            stop: Default::default(),
+            progress_store,
+        }
     }
 
     /// Start a new service as a loop, with a certain body
@@ -61,7 +65,6 @@ impl ServiceControl {
     pub fn spawn_event_loop<F, P>(
         &self,
         persistence: P,
-        progress_store: SharedProgressTracker,
         service_id: ServiceIdRef,
         event_reader: event_log::SharedReader<P>,
         mut f: F,
@@ -72,27 +75,29 @@ impl ServiceControl {
     {
         let service_id = service_id.to_owned();
 
-        let mut progress = match progress_store.load(&service_id) {
+        let mut progress = match self.progress_store.load(&service_id) {
             Err(e) => return JoinHandle::new(thread::spawn(move || Err(e))),
             Ok(o) => o,
         };
 
-        self.spawn_loop(move || {
+        self.spawn_loop({
+            let progress_store = self.progress_store.clone();
+            move || {
+                let mut connection = persistence.get_connection()?;
+                let mut transaction = connection.start_transaction()?;
 
-            let mut connection = persistence.get_connection()?;
-            let mut transaction = connection.start_transaction()?;
+                for event in event_reader
+                    .read(progress.clone(), 1, Some(std::time::Duration::from_secs(1)))?
+                    .drain(..)
+                {
+                    f(&mut transaction, event.details)?;
 
-            for event in event_reader
-                .read(progress.clone(), 1, Some(std::time::Duration::from_secs(1)))?
-                .drain(..)
-            {
-                f(&mut transaction, event.details)?;
-
-                progress = Some(event.id.clone());
-                progress_store.store(&service_id, &event.id)?;
+                    progress = Some(event.id.clone());
+                    progress_store.store(&service_id, &event.id)?;
+                }
+                transaction.commit()?;
+                Ok(())
             }
-            transaction.commit()?;
-            Ok(())
         })
     }
 }

@@ -279,7 +279,6 @@ impl Service {
     pub fn new<P>(
         svc_ctl: &super::ServiceControl,
         persistence: P,
-        progress_store: super::progress::SharedProgressTracker,
         bidding_state_store: SharedBiddingStateStore<P>,
         event_reader: event_log::SharedReader<P>,
         even_writer: event_log::SharedWriter<P>,
@@ -289,7 +288,6 @@ impl Service {
     {
         let thread = svc_ctl.spawn_event_loop(
             persistence,
-            progress_store.clone(),
             BIDDING_ENGINE_SERVICE_ID,
             event_reader,
             move |transaction, event_details| {
