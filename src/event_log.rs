@@ -28,8 +28,9 @@ pub struct Event {
 pub trait Reader {
     type Persistence : persistence::Persistence;
 
-    fn read(
+    fn read_tr<'a>(
         &self,
+        conn: &mut <<<Self as Reader>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
         last: Option<EventId>,
         limit: usize,
         timeout: Option<Duration>,
@@ -39,7 +40,15 @@ pub trait Reader {
 pub trait Writer {
     type Persistence : persistence::Persistence;
 
-    fn write(&self, events: &[EventDetails]) -> Result<()>;
+    fn write(
+        &self,
+        conn: &mut <<Self as Writer>::Persistence as persistence::Persistence>::Connection,
+        events: &[EventDetails]) -> Result<()>;
+
+    fn write_tr<'a>(
+        &self,
+        conn: &mut <<<Self as Writer>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        events: &[EventDetails]) -> Result<()>;
 }
 
 pub type SharedReader<P> = Arc<dyn Reader<Persistence=P> + Sync + Send + 'static>;
@@ -50,8 +59,9 @@ pub struct InMemoryLogReader(Arc<RwLock<std::collections::BTreeMap<EventId, Even
 
 impl Reader for InMemoryLogReader {
     type Persistence = persistence::InMemoryPersistence;
-    fn read(
+    fn read_tr<'a>(
         &self,
+        conn: &mut persistence::InMemoryTransaction,
         last: Option<EventId>,
         limit: usize,
         timeout: Option<Duration>,
@@ -64,7 +74,18 @@ pub struct InMemoryLogWriter(Arc<RwLock<std::collections::BTreeMap<EventId, Even
 
 impl Writer for InMemoryLogWriter {
     type Persistence = persistence::InMemoryPersistence;
-    fn write(&self, events: &[EventDetails]) -> Result<()> {
+
+    fn write(
+        &self,
+        conn: &mut persistence::InMemoryConnection,
+        events: &[EventDetails]) -> Result<()> {
+        todo!()
+    }
+
+    fn write_tr<'a>(
+        &self,
+        conn: &mut persistence::InMemoryTransaction,
+        events: &[EventDetails]) -> Result<()> {
         todo!()
     }
 }

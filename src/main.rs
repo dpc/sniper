@@ -1,4 +1,5 @@
 // Hey, it's not too bad https://blog.rust-lang.org/2021/08/03/GATs-stabilization-push.html
+// See [persistence] module for why we need it.
 #![feature(generic_associated_types)]
 
 
@@ -8,8 +9,8 @@ mod service;
 mod persistence;
 
 fn main() {
+    let persistence = persistence::InMemoryPersistence::new();
     let (event_writer, event_reader) = event_log::new_in_memory_shared();
-    let persistence = persistence::InMemoryPersistence{};
     let progress_store = service::progress::InMemoryProgressTracker::new_shared();
     let bidding_state_store = service::bidding_engine::InMemoryBiddingStateStore::new_shared();
 
@@ -23,3 +24,6 @@ fn main() {
         event_writer,
     );
 }
+
+#[cfg(test)]
+mod tests;

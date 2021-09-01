@@ -42,10 +42,13 @@ impl Service {
         auction_house_client: SharedAuctionHouseClient,
     ) -> Self where P: persistence::Persistence + 'static {
         let reader_thread = svc_ctl.spawn_loop({
+            let persistence = persistence.clone();
             let auction_house_client = auction_house_client.clone();
             move || {
+                // TODO: no atomicity offered by the auction_house_client interface
                 if let Some(event) = auction_house_client.poll(Some(Duration::from_secs(1)))? {
-                    even_writer.write(&[event_log::EventDetails::AuctionHouse(event)])?;
+                    let mut connection = persistence.get_connection()?;
+                    even_writer.write(&mut connection, &[event_log::EventDetails::AuctionHouse(event)])?;
                 }
 
                 Ok(())

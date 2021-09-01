@@ -5,19 +5,18 @@
 //! architecture is not a simple thing in any language.
 pub mod postgres;
 
-use std::sync::Arc;
 use anyhow::Result;
 use anyhow::bail;
 
 /// An instance of a persistence (store) that can hold data
-pub trait Persistence : Send + Sync {
+///
+/// Must be cloneable and thread-safe.
+pub trait Persistence : Send + Sync + Clone {
     type Connection: Connection;
 
     /// Get a connection to a store
     fn get_connection(&self) -> Result<Self::Connection>;
 }
-
-pub type SharedPersistence<C> = Arc<dyn Persistence<Connection=C> + Send + Sync + 'static>;
 
 /// Trait unifying `Connection` and `Transaction` under one umbrealla
 pub trait GenericConnection {}
@@ -36,8 +35,14 @@ pub trait Transaction: GenericConnection {
     fn rollback(self) -> Result<()>;
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct InMemoryPersistence {}
+
+impl InMemoryPersistence {
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
 
 impl Persistence for InMemoryPersistence {
     type Connection = InMemoryConnection;

@@ -90,7 +90,7 @@ impl<P> ServiceControl<P> {
                 let mut transaction = connection.start_transaction()?;
 
                 for event in event_reader
-                    .read(progress.clone(), 1, Some(std::time::Duration::from_secs(1)))?
+                    .read_tr(&mut transaction, progress.clone(), 1, Some(std::time::Duration::from_secs(1)))?
                     .drain(..)
                 {
                     f(&mut transaction, event.details)?;

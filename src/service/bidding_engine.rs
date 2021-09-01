@@ -219,7 +219,7 @@ pub struct AuctionBiddingState {
 }
 
 impl AuctionBiddingState {
-    pub fn handle_auction_event(self, event: auction_house::EventDetails) -> Self {
+    pub fn handle_auction_house_event(self, event: auction_house::EventDetails) -> Self {
         Self {
             max_bid: self.max_bid,
             state: self.state.handle_auction_event(event),
@@ -292,22 +292,28 @@ impl Service {
             event_reader,
             move |transaction, event_details| {
                 Ok(match event_details {
-                    event_log::EventDetails::AuctionHouse(event) => Self::handle_auction_event(
-                        transaction,
-                        todo!(),
-                        &even_writer,
-                        event.item,
-                        event.event,
-                    )?,
-                    event_log::EventDetails::Ui(ui::Event::MaxBidSet(item_bid)) => {
-                        Self::handle_new_max_bid(
+                    event_log::EventDetails::AuctionHouse(event) => {
+                        Self::handle_event_with(
                             transaction,
                             &bidding_state_store,
                             &even_writer,
-                            item_bid.item,
-                            item_bid.price,
+                            event.item.clone(),
+                            |old_state| {
+                                Self::handle_auction_house_event(event.item, old_state, event.event)
+                            },
                         )?
-                    }
+                    },
+                    event_log::EventDetails::Ui(ui::Event::MaxBidSet(item_bid)) => {
+                        Self::handle_event_with(
+                            transaction,
+                            &bidding_state_store,
+                            &even_writer,
+                            item_bid.item.clone(),
+                            |old_state| {
+                                Self::handle_max_bid_event(item_bid.item, old_state, item_bid.price)
+                            },
+                        )?
+                    },
                     _ => (),
                 })
             },
@@ -315,78 +321,103 @@ impl Service {
         Self { thread }
     }
 
-    fn handle_auction_event<'a, P>(
-        transaction: &mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
-        bidding_state_store: &mut dyn BiddingStateStore<Persistence = P>,
-        event_writer: &event_log::SharedWriter<P>,
-        item_id: ItemId,
-        event: crate::service::auction_house::EventDetails,
-    ) -> Result<()>
-    where
-        P: persistence::Persistence + 'static,
-    {
-        if let Some(auction_state) = bidding_state_store.load_tr(transaction, &item_id)? {
-            let new_state = auction_state.handle_auction_event(event);
-
-            if new_state != auction_state {
-                // TODO: wrap everything in a db transaction
-                bidding_state_store.store_tr(transaction, &item_id, auction_state)?;
-
-                if let Some(our_bid) = new_state.state.get_next_bid(new_state.max_bid) {
-                    event_writer.write(&[event_log::EventDetails::BiddingEngine(Event::Bid(
-                        ItemBid {
-                            item: item_id,
-                            price: our_bid,
-                        },
-                    ))])?;
-                }
-            }
-        } else {
-            event_writer.write(
-                &[event_log::EventDetails::BiddingEngine(Event::AuctionError(
-                    AuctionError::UnknownAuction(item_id),
-                ))],
-            )?;
-        }
-        Ok(())
-    }
-
-    fn handle_new_max_bid<'a, P>(
+    fn handle_event_with<'a, P>(
         transaction: &mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
         bidding_state_store: &SharedBiddingStateStore<P>,
         event_writer: &event_log::SharedWriter<P>,
         item_id: ItemId,
-        price: Amount,
+        f: impl FnOnce(Option<AuctionBiddingState>) -> Result<(Option<AuctionBiddingState>, Vec<Event>)>,
     ) -> Result<()>
     where
         P: persistence::Persistence,
     {
-        let auction_state = bidding_state_store
-            .load_tr(transaction, &item_id)?
-            .unwrap_or_else(Default::default);
+        let auction_state = bidding_state_store.load_tr(transaction, &item_id)?;
+
+        let (new_state, events) = f(auction_state)?;
+
+        if let Some(new_state) = new_state {
+            bidding_state_store.store_tr(transaction, &item_id, new_state)?;
+        }
+
+        event_writer.write_tr(
+            transaction,
+            &events
+                .into_iter()
+                .map(|e| event_log::EventDetails::BiddingEngine(e))
+                .collect::<Vec<_>>(),
+        )?;
+
+        Ok(())
+    }
+
+    fn handle_auction_house_event(
+        item_id: ItemId,
+        old_state: Option<AuctionBiddingState>,
+        event: crate::service::auction_house::EventDetails,
+    ) -> Result<(Option<AuctionBiddingState>, Vec<Event>)> {
+        Ok(if let Some(auction_state) = old_state {
+            let new_state = auction_state.handle_auction_house_event(event);
+
+            if new_state != auction_state {
+                (
+                    Some(new_state),
+                    new_state
+                        .state
+                        .get_next_bid(new_state.max_bid)
+                        .map(move |our_bid| {
+                            Event::Bid(ItemBid {
+                                item: item_id,
+                                price: our_bid,
+                            })
+                        })
+                        .into_iter()
+                        .collect(),
+                )
+            } else {
+                (None, vec![])
+            }
+        } else {
+            (
+                None,
+                vec![Event::AuctionError(AuctionError::UnknownAuction(item_id))],
+            )
+        })
+    }
+
+
+    fn handle_max_bid_event(
+        item_id: ItemId,
+        old_state: Option<AuctionBiddingState>,
+        price: Amount,
+    ) -> Result<(Option<AuctionBiddingState>, Vec<Event>)>
+    {
+        let auction_state = old_state.unwrap_or_else(Default::default);
 
         let new_state = auction_state.handle_new_max_bid(price);
 
-        if new_state != auction_state
+        Ok(if new_state != auction_state
             && new_state
                 .state
                 .higest_bid
                 .map(|bid| bid.bidder != Bidder::Sniper)
                 .unwrap_or(true)
         {
-            // TODO: wrap everything in a db transaction
-            bidding_state_store.store_tr(transaction, &item_id, auction_state)?;
+            (Some(new_state),
 
-            if let Some(our_bid) = new_state.state.get_next_bid(new_state.max_bid) {
-                event_writer.write(&[event_log::EventDetails::BiddingEngine(Event::Bid(
-                    ItemBid {
-                        item: item_id,
-                        price: our_bid,
-                    },
-                ))])?;
-            }
-        }
-
-        Ok(())
+                    new_state
+                        .state
+                        .get_next_bid(new_state.max_bid)
+                        .map(move |our_bid| {
+                            Event::Bid(ItemBid {
+                                item: item_id,
+                                price: our_bid,
+                            })
+                        })
+                        .into_iter()
+                        .collect()
+                )
+        } else {
+            (None, vec![])
+        })
     }
 }
