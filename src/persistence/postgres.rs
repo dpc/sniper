@@ -1,5 +1,4 @@
 use super::*;
-use ::postgres;
 
 #[derive(Debug)]
 pub struct PostgresStore {
@@ -9,13 +8,13 @@ pub struct PostgresStore {
 impl Store for PostgresStore {
     type Connection = PostgresConnection;
 
-    fn get_connection(&mut self) -> Result<Self::Connection> {
-        todo!()
+    fn get_connection(&self) -> Result<Self::Connection> {
+        Ok(PostgresConnection{ client: self.pool.get()?})
     }
 }
 
 pub struct PostgresConnection {
-    transaction: postgres::Client,
+    client: r2d2::PooledConnection<r2d2_postgres::PostgresConnectionManager<r2d2_postgres::postgres::NoTls>>,
 }
 
 impl GenericConnection for PostgresConnection {}
@@ -24,13 +23,14 @@ impl Connection for PostgresConnection {
     type Transaction<'a> = PostgresTransaction<'a>;
 
     fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>> {
-        Ok(PostgresTransaction{ phantom: std::marker::PhantomData })
+        Ok(PostgresTransaction{
+            transaction: self.client.transaction()?,
+        })
     }
 }
 
-#[derive(Default, Debug)]
 pub struct PostgresTransaction<'a> {
-    phantom: std::marker::PhantomData<&'a ()>,
+    transaction: ::postgres::Transaction<'a>
 }
 
 impl<'a> GenericConnection for PostgresTransaction<'a> {}

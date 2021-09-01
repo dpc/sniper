@@ -5,17 +5,19 @@ use anyhow::Result;
 pub trait Store {
     type Connection: Connection;
 
-    fn get_connection(&mut self) -> Result<Self::Connection>;
+    fn get_connection(&self) -> Result<Self::Connection>;
 }
 
 pub trait GenericConnection {}
 
 pub trait Connection: GenericConnection {
-    type Transaction<'a> : Transaction where Self : 'a;
+    type Transaction<'a>: Transaction
+    where
+        Self: 'a;
     fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>>;
 }
 
-pub trait Transaction: GenericConnection{
+pub trait Transaction: GenericConnection {
     fn commit(&mut self) -> Result<()>;
 }
 
@@ -25,15 +27,13 @@ pub struct InMemoryStore {}
 impl Store for InMemoryStore {
     type Connection = InMemoryConnection;
 
-    fn get_connection(&mut self) -> Result<Self::Connection> {
+    fn get_connection(&self) -> Result<Self::Connection> {
         Ok(InMemoryConnection::default())
     }
 }
 
 #[derive(Default, Debug)]
-pub struct InMemoryConnection {
-    transaction: InMemoryTransaction,
-}
+pub struct InMemoryConnection {}
 
 impl GenericConnection for InMemoryConnection {}
 
@@ -41,7 +41,7 @@ impl Connection for InMemoryConnection {
     type Transaction<'a> = InMemoryTransaction;
 
     fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>> {
-        Ok(self.transaction)
+        Ok(InMemoryTransaction)
     }
 }
 
