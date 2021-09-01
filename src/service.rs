@@ -16,8 +16,6 @@ use std::thread;
 
 use crate::event_log;
 
-use self::progress::SharedProgressTracker;
-
 pub type ServiceId = String;
 pub type ServiceIdRef<'a> = &'a str;
 
@@ -27,13 +25,13 @@ pub type ServiceIdRef<'a> = &'a str;
 /// gracefully terminate them, and handle and top-level error of any
 /// of them by stopping everything.
 #[derive(Clone)]
-pub struct ServiceControl {
+pub struct ServiceControl<P> {
     stop: Arc<AtomicBool>,
-    progress_store: progress::SharedProgressTracker,
+    progress_store: progress::SharedProgressTracker<P>,
 }
 
-impl ServiceControl {
-    pub fn new(progress_store: progress::SharedProgressTracker) -> Self {
+impl<P> ServiceControl<P> {
+    pub fn new(progress_store: progress::SharedProgressTracker<P>) -> Self {
         Self {
             stop: Default::default(),
             progress_store,
@@ -62,7 +60,7 @@ impl ServiceControl {
         }))
     }
 
-    pub fn spawn_event_loop<F, P>(
+    pub fn spawn_event_loop<F>(
         &self,
         persistence: P,
         service_id: ServiceIdRef,
@@ -75,9 +73,14 @@ impl ServiceControl {
     {
         let service_id = service_id.to_owned();
 
-        let mut progress = match self.progress_store.load(&service_id) {
-            Err(e) => return JoinHandle::new(thread::spawn(move || Err(e))),
-            Ok(o) => o,
+        let mut progress = {
+            match (|| {
+                let mut connection = persistence.get_connection()?;
+                self.progress_store.load(&mut connection, &service_id)
+            })() {
+                Err(e) => return JoinHandle::new(thread::spawn(move || Err(e))),
+                Ok(o) => o,
+            }
         };
 
         self.spawn_loop({
@@ -93,7 +96,7 @@ impl ServiceControl {
                     f(&mut transaction, event.details)?;
 
                     progress = Some(event.id.clone());
-                    progress_store.store(&service_id, &event.id)?;
+                    progress_store.store_tr(&mut transaction, &service_id, &event.id)?;
                 }
                 transaction.commit()?;
                 Ok(())

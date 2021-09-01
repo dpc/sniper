@@ -277,7 +277,7 @@ pub struct Service {
 
 impl Service {
     pub fn new<P>(
-        svc_ctl: &super::ServiceControl,
+        svc_ctl: &super::ServiceControl<P>,
         persistence: P,
         bidding_state_store: SharedBiddingStateStore<P>,
         event_reader: event_log::SharedReader<P>,

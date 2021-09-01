@@ -1,5 +1,6 @@
 use super::{ServiceId, ServiceIdRef};
 use crate::event_log::{EventId, EventIdRef};
+use crate::persistence;
 
 use anyhow::Result;
 use std::collections::BTreeMap;
@@ -7,11 +8,28 @@ use std::sync::{Arc, Mutex};
 
 /// A persistent store to keep track of the last processed event
 pub trait ProgressTracker {
-    fn store(&self, id: ServiceIdRef, event_id: EventIdRef) -> Result<()>;
-    fn load(&self, id: ServiceIdRef) -> Result<Option<EventId>>;
+    type Persistence: persistence::Persistence;
+    fn load(
+        &self,
+        conn: &mut <<Self as ProgressTracker>::Persistence as persistence::Persistence>::Connection,
+        id: ServiceIdRef,
+    ) -> Result<Option<EventId>>;
+
+    fn store_tr<'a>(
+        &self,
+        conn: &mut <<<Self as ProgressTracker>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        id: ServiceIdRef,
+        event_id: EventIdRef,
+    ) -> Result<()>;
+    fn load_tr<'a>(
+        &self,
+        conn: &mut <<<Self as ProgressTracker>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        id: ServiceIdRef,
+    ) -> Result<Option<EventId>>;
 }
 
-pub type SharedProgressTracker = Arc<dyn ProgressTracker + Send + Sync + 'static>;
+pub type SharedProgressTracker<P> =
+    Arc<dyn ProgressTracker<Persistence = P> + Send + Sync + 'static>;
 
 pub struct InMemoryProgressTracker {
     store: Mutex<BTreeMap<ServiceId, EventId>>,
@@ -24,20 +42,40 @@ impl InMemoryProgressTracker {
         }
     }
 
-    pub fn new_shared() -> SharedProgressTracker {
+    pub fn new_shared() -> SharedProgressTracker<persistence::InMemoryPersistence> {
         Arc::new(Self::new())
     }
 }
 
 impl ProgressTracker for InMemoryProgressTracker {
-    fn store(&self, id: ServiceIdRef, event_id: EventIdRef) -> Result<()> {
+    type Persistence = persistence::InMemoryPersistence;
+
+    fn load<'a>(
+        &self,
+        _conn: &mut persistence::InMemoryConnection,
+        id: ServiceIdRef,
+    ) -> Result<Option<EventId>> {
+        Ok(self.store.lock().expect("lock").get(id).cloned())
+    }
+
+    fn store_tr<'a>(
+        &self,
+        _conn: &mut persistence::InMemoryTransaction,
+        id: ServiceIdRef,
+        event_id: EventIdRef,
+    ) -> Result<()> {
         self.store
             .lock()
             .expect("lock")
             .insert(id.to_owned(), event_id.to_owned());
         Ok(())
     }
-    fn load(&self, id: ServiceIdRef) -> Result<Option<EventId>> {
+
+    fn load_tr<'a>(
+        &self,
+        _conn: &mut persistence::InMemoryTransaction,
+        id: ServiceIdRef,
+    ) -> Result<Option<EventId>> {
         Ok(self.store.lock().expect("lock").get(id).cloned())
     }
 }

@@ -35,7 +35,7 @@ pub const WRITER_ID: &'static str = "auction-house-reader";
 
 impl Service {
     fn new<P>(
-        svc_ctl: super::ServiceControl,
+        svc_ctl: super::ServiceControl<P>,
         persistence: P,
         event_reader: event_log::SharedReader<P>,
         even_writer: event_log::SharedWriter<P>,
