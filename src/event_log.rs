@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use crate::persistence;
 
 use crate::service::{auction_house, bidding_engine, ui};
 
@@ -25,6 +26,8 @@ pub struct Event {
 }
 
 pub trait Reader {
+    type Persistence : persistence::Persistence;
+
     fn read(
         &self,
         last: Option<EventId>,
@@ -34,16 +37,19 @@ pub trait Reader {
 }
 
 pub trait Writer {
+    type Persistence : persistence::Persistence;
+
     fn write(&self, events: &[EventDetails]) -> Result<()>;
 }
 
-pub type SharedReader = Arc<dyn Reader + Sync + Send + 'static>;
-pub type SharedWriter = Arc<dyn Writer + Sync + Send + 'static>;
+pub type SharedReader<P> = Arc<dyn Reader<Persistence=P> + Sync + Send + 'static>;
+pub type SharedWriter<P> = Arc<dyn Writer<Persistence=P> + Sync + Send + 'static>;
 
 // TODO: address double `Arc`?
 pub struct InMemoryLogReader(Arc<RwLock<std::collections::BTreeMap<EventId, EventDetails>>>);
 
 impl Reader for InMemoryLogReader {
+    type Persistence = persistence::InMemoryPersistence;
     fn read(
         &self,
         last: Option<EventId>,
@@ -57,11 +63,13 @@ impl Reader for InMemoryLogReader {
 pub struct InMemoryLogWriter(Arc<RwLock<std::collections::BTreeMap<EventId, EventDetails>>>);
 
 impl Writer for InMemoryLogWriter {
+    type Persistence = persistence::InMemoryPersistence;
     fn write(&self, events: &[EventDetails]) -> Result<()> {
         todo!()
     }
 }
-pub fn new_in_memory_shared() -> (SharedWriter, SharedReader) {
+
+pub fn new_in_memory_shared() -> (SharedWriter<persistence::InMemoryPersistence>, SharedReader<persistence::InMemoryPersistence>) {
     let log = Arc::new(RwLock::new(BTreeMap::new()));
     (
         Arc::new(InMemoryLogWriter(log.clone())),

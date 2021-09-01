@@ -5,6 +5,7 @@
 use super::JoinHandle;
 use crate::auction::{Amount, BidDetails, Bidder, ItemBid, ItemId, ItemIdRef};
 use crate::event_log;
+use crate::persistence;
 use crate::service::{auction_house, ui};
 use anyhow::Result;
 use std::collections::BTreeMap;
@@ -221,13 +222,16 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn new(
+    pub fn new<P>(
         svc_ctl: &super::ServiceControl,
         progress_store: super::progress::SharedProgressTracker,
         bidding_state_store: SharedBiddingStateStore,
-        event_reader: event_log::SharedReader,
-        even_writer: event_log::SharedWriter,
-    ) -> Self {
+        event_reader: event_log::SharedReader<P>,
+        even_writer: event_log::SharedWriter<P>,
+    ) -> Self
+    where
+        P: persistence::Persistence + 'static,
+    {
         let thread = svc_ctl.spawn_event_loop(
             progress_store.clone(),
             BIDDING_ENGINE_SERVICE_ID,
@@ -255,12 +259,15 @@ impl Service {
         Self { thread }
     }
 
-    fn handle_auction_event(
+    fn handle_auction_event<P>(
         bidding_state_store: &SharedBiddingStateStore,
-        event_writer: &event_log::SharedWriter,
+        event_writer: &event_log::SharedWriter<P>,
         item_id: ItemId,
         event: crate::service::auction_house::EventDetails,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        P: persistence::Persistence + 'static,
+    {
         if let Some(auction_state) = bidding_state_store.load(&item_id)? {
             let new_state = auction_state.handle_auction_event(event);
 
@@ -287,12 +294,15 @@ impl Service {
         Ok(())
     }
 
-    fn handle_new_max_bid(
+    fn handle_new_max_bid<P>(
         bidding_state_store: &SharedBiddingStateStore,
-        event_writer: &event_log::SharedWriter,
+        event_writer: &event_log::SharedWriter<P>,
         item_id: ItemId,
         price: Amount,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        P: persistence::Persistence,
+    {
         let auction_state = bidding_state_store
             .load(&item_id)?
             .unwrap_or_else(Default::default);

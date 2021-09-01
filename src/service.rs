@@ -3,6 +3,7 @@ pub mod bidding_engine;
 pub mod progress;
 pub mod ui;
 
+use crate::persistence;
 use anyhow::format_err;
 use anyhow::Result;
 use std::sync::{
@@ -55,15 +56,16 @@ impl ServiceControl {
         }))
     }
 
-    pub fn spawn_event_loop<F>(
+    pub fn spawn_event_loop<F, P>(
         &self,
         progress_store: SharedProgressTracker,
         service_id: ServiceIdRef,
-        event_reader: event_log::SharedReader,
+        event_reader: event_log::SharedReader<P>,
         mut f: F,
     ) -> JoinHandle
     where
         F: FnMut(event_log::EventDetails) -> Result<()> + Send + Sync + 'static,
+        P: persistence::Persistence + 'static,
     {
         let service_id = service_id.to_owned();
 

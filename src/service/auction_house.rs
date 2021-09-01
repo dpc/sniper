@@ -6,6 +6,7 @@ use crate::auction::{Amount, BidDetails, ItemId, ItemIdRef};
 use crate::event_log;
 use anyhow::Result;
 
+use crate::persistence;
 use super::JoinHandle;
 
 pub struct Event {
@@ -33,13 +34,13 @@ pub struct Service {
 pub const WRITER_ID: &'static str = "auction-house-reader";
 
 impl Service {
-    fn new(
+    fn new<P>(
         svc_ctl: super::ServiceControl,
         progress_store: super::progress::SharedProgressTracker,
-        event_reader: event_log::SharedReader,
-        even_writer: event_log::SharedWriter,
+        event_reader: event_log::SharedReader<P>,
+        even_writer: event_log::SharedWriter<P>,
         auction_house_client: SharedAuctionHouseClient,
-    ) -> Self {
+    ) -> Self where P: persistence::Persistence + 'static {
         let reader_thread = svc_ctl.spawn_loop({
             let auction_house_client = auction_house_client.clone();
             move || {

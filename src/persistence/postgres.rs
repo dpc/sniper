@@ -1,11 +1,11 @@
 use super::*;
 
 #[derive(Debug)]
-pub struct PostgresStore {
+pub struct PostgresPersistence {
     pool: r2d2::Pool<r2d2_postgres::PostgresConnectionManager<r2d2_postgres::postgres::NoTls>>,
 }
 
-impl Store for PostgresStore {
+impl Persistence for PostgresPersistence {
     type Connection = PostgresConnection;
 
     fn get_connection(&self) -> Result<Self::Connection> {

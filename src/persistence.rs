@@ -2,7 +2,7 @@ pub mod postgres;
 
 use anyhow::Result;
 
-pub trait Store {
+pub trait Persistence {
     type Connection: Connection;
 
     fn get_connection(&self) -> Result<Self::Connection>;
@@ -22,9 +22,9 @@ pub trait Transaction: GenericConnection {
 }
 
 #[derive(Default, Debug)]
-pub struct InMemoryStore {}
+pub struct InMemoryPersistence {}
 
-impl Store for InMemoryStore {
+impl Persistence for InMemoryPersistence {
     type Connection = InMemoryConnection;
 
     fn get_connection(&self) -> Result<Self::Connection> {
