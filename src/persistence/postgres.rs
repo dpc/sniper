@@ -17,8 +17,6 @@ pub struct PostgresConnection {
     pub client: r2d2::PooledConnection<r2d2_postgres::PostgresConnectionManager<r2d2_postgres::postgres::NoTls>>,
 }
 
-impl GenericConnection for PostgresConnection {}
-
 impl Connection for PostgresConnection {
     type Transaction<'a> = PostgresTransaction<'a>;
 
@@ -32,8 +30,6 @@ impl Connection for PostgresConnection {
 pub struct PostgresTransaction<'a> {
     transaction: ::postgres::Transaction<'a>
 }
-
-impl<'a> GenericConnection for PostgresTransaction<'a> {}
 
 impl<'a> Transaction for PostgresTransaction<'a> {
     fn commit(self) -> Result<()> {
