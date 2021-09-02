@@ -1,12 +1,13 @@
 // Hey, it's not too bad https://blog.rust-lang.org/2021/08/03/GATs-stabilization-push.html
 // See [persistence] module for why we need it.
 #![feature(generic_associated_types)]
-
+// since we're already on nightly...
+#![feature(map_first_last)]
 
 mod auction;
 mod event_log;
-mod service;
 mod persistence;
+mod service;
 
 fn main() {
     let persistence = persistence::InMemoryPersistence::new();

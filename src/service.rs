@@ -3,16 +3,18 @@ pub mod bidding_engine;
 pub mod progress;
 pub mod ui;
 
-use crate::persistence;
-use crate::persistence::Connection;
-use crate::persistence::Transaction;
-use anyhow::format_err;
-use anyhow::Result;
-use std::sync::{
-    atomic::{self, AtomicBool},
-    Arc,
+use crate::{
+    persistence,
+    persistence::{Connection, Transaction},
 };
-use std::thread;
+use anyhow::{format_err, Result};
+use std::{
+    sync::{
+        atomic::{self, AtomicBool, Ordering},
+        Arc,
+    },
+    thread,
+};
 
 use crate::event_log;
 
@@ -26,14 +28,14 @@ pub type ServiceIdRef<'a> = &'a str;
 /// of them by stopping everything.
 #[derive(Clone)]
 pub struct ServiceControl<P> {
-    stop: Arc<AtomicBool>,
+    stop_all: Arc<AtomicBool>,
     progress_store: progress::SharedProgressTracker<P>,
 }
 
 impl<P> ServiceControl<P> {
     pub fn new(progress_store: progress::SharedProgressTracker<P>) -> Self {
         Self {
-            stop: Default::default(),
+            stop_all: Default::default(),
             progress_store,
         }
     }
@@ -46,18 +48,25 @@ impl<P> ServiceControl<P> {
     where
         F: FnMut() -> Result<()> + Send + Sync + 'static,
     {
-        JoinHandle::new(thread::spawn({
-            let stop = self.stop.clone();
-            move || {
-                while !stop.load(atomic::Ordering::SeqCst) {
-                    if let Err(e) = f() {
-                        stop.store(true, atomic::Ordering::SeqCst);
-                        return Err(e);
+        let stop = Arc::new(AtomicBool::new(false));
+
+        JoinHandle::new(
+            stop.clone(),
+            thread::spawn({
+                let stop_all = self.stop_all.clone();
+                move || {
+                    while !stop.load(atomic::Ordering::SeqCst)
+                        && !stop_all.load(atomic::Ordering::SeqCst)
+                    {
+                        if let Err(e) = f() {
+                            stop_all.store(true, atomic::Ordering::SeqCst);
+                            return Err(e);
+                        }
                     }
+                    Ok(())
                 }
-                Ok(())
-            }
-        }))
+            }),
+        )
     }
 
     pub fn spawn_event_loop<F>(
@@ -78,7 +87,13 @@ impl<P> ServiceControl<P> {
                 let mut connection = persistence.get_connection()?;
                 self.progress_store.load(&mut connection, &service_id)
             })() {
-                Err(e) => return JoinHandle::new(thread::spawn(move || Err(e))),
+                // to avoid returning a `Result`, on error, spawn a thread that will immediately terminate with an error
+                Err(e) => {
+                    return JoinHandle::new(
+                        Arc::new(AtomicBool::new(false)),
+                        thread::spawn(move || Err(e)),
+                    )
+                }
                 Ok(o) => o,
             }
         };
@@ -90,7 +105,12 @@ impl<P> ServiceControl<P> {
                 let mut transaction = connection.start_transaction()?;
 
                 for event in event_reader
-                    .read_tr(&mut transaction, progress.clone(), 1, Some(std::time::Duration::from_secs(1)))?
+                    .read_tr(
+                        &mut transaction,
+                        progress.clone(),
+                        1,
+                        Some(std::time::Duration::from_secs(1)),
+                    )?
                     .drain(..)
                 {
                     f(&mut transaction, event.details)?;
@@ -109,17 +129,24 @@ impl<P> ServiceControl<P> {
 ///
 /// TODO: Would it be better to have it set the `stop` flag toc terminate all threads
 /// on drop?
-pub struct JoinHandle(Option<thread::JoinHandle<Result<()>>>);
+pub struct JoinHandle {
+    stop: Arc<AtomicBool>,
+    thread: Option<thread::JoinHandle<Result<()>>>,
+}
 
 impl JoinHandle {
-    fn new(handle: thread::JoinHandle<Result<()>>) -> Self {
-        JoinHandle(Some(handle))
+    fn new(stop: Arc<AtomicBool>, handle: thread::JoinHandle<Result<()>>) -> Self {
+        JoinHandle {
+            stop,
+            thread: Some(handle),
+        }
     }
 }
 
 impl JoinHandle {
     fn join_mut(&mut self) -> Result<()> {
-        if let Some(h) = self.0.take() {
+        self.stop.store(true, Ordering::SeqCst);
+        if let Some(h) = self.thread.take() {
             h.join().map_err(|e| format_err!("join failed: {:?}", e))?
         } else {
             Ok(())

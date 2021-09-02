@@ -10,13 +10,13 @@
 //! * https://www.reddit.com/r/golang/comments/i1vy4s/ddd_vs_db_transactions_how_to_reconcile/
 pub mod postgres;
 
-use anyhow::Result;
-use anyhow::bail;
+use anyhow::{bail, Result};
+use std::sync::{Arc, RwLock, RwLockWriteGuard};
 
 /// An instance of a persistence (store) that can hold data
 ///
 /// Must be cloneable and thread-safe.
-pub trait Persistence : Send + Sync + Clone {
+pub trait Persistence: Send + Sync + Clone {
     type Connection: Connection;
 
     /// Get a connection to a store
@@ -40,12 +40,16 @@ pub trait Transaction {
 /// Fake in-memory persistence.
 ///
 /// Useful for unit-tests.
-#[derive(Default, Debug, Clone)]
-pub struct InMemoryPersistence {}
+#[derive(Debug, Clone)]
+pub struct InMemoryPersistence {
+    lock: Arc<RwLock<()>>,
+}
 
 impl InMemoryPersistence {
     pub fn new() -> Self {
-        Default::default()
+        Self {
+            lock: Arc::new(RwLock::new(())),
+        }
     }
 }
 
@@ -53,26 +57,33 @@ impl Persistence for InMemoryPersistence {
     type Connection = InMemoryConnection;
 
     fn get_connection(&self) -> Result<Self::Connection> {
-        Ok(InMemoryConnection::default())
+        Ok(InMemoryConnection {
+            lock: self.lock.clone(),
+        })
     }
 }
 
 #[derive(Default, Debug)]
-pub struct InMemoryConnection {}
-
+pub struct InMemoryConnection {
+    lock: Arc<RwLock<()>>,
+}
 
 impl Connection for InMemoryConnection {
-    type Transaction<'a> = InMemoryTransaction;
+    type Transaction<'a> = InMemoryTransaction<'a>;
 
     fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>> {
-        Ok(InMemoryTransaction)
+        Ok(InMemoryTransaction {
+            lock_guard: self.lock.write().expect("lock to work"),
+        })
     }
 }
 
-#[derive(Default, Debug)]
-pub struct InMemoryTransaction;
+#[derive(Debug)]
+pub struct InMemoryTransaction<'a> {
+    lock_guard: RwLockWriteGuard<'a, ()>,
+}
 
-impl Transaction for InMemoryTransaction {
+impl<'a> Transaction for InMemoryTransaction<'a> {
     fn commit(self) -> Result<()> {
         Ok(())
     }

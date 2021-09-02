@@ -1,19 +1,22 @@
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use super::bidding_engine;
-use crate::auction::{Amount, BidDetails, ItemId, ItemIdRef};
-use crate::event_log;
+use crate::{
+    auction::{Amount, BidDetails, ItemId, ItemIdRef},
+    event_log,
+};
 use anyhow::Result;
 
-use crate::persistence;
 use super::JoinHandle;
+use crate::persistence;
 
+#[derive(Clone, Debug)]
 pub struct Event {
     pub item: ItemId,
     pub event: EventDetails,
 }
 
+#[derive(Clone, Debug)]
 pub enum EventDetails {
     Bid(BidDetails),
     Closed,
@@ -40,7 +43,10 @@ impl Service {
         event_reader: event_log::SharedReader<P>,
         even_writer: event_log::SharedWriter<P>,
         auction_house_client: SharedAuctionHouseClient,
-    ) -> Self where P: persistence::Persistence + 'static {
+    ) -> Self
+    where
+        P: persistence::Persistence + 'static,
+    {
         let reader_thread = svc_ctl.spawn_loop({
             let persistence = persistence.clone();
             let auction_house_client = auction_house_client.clone();
@@ -48,7 +54,10 @@ impl Service {
                 // TODO: no atomicity offered by the auction_house_client interface
                 if let Some(event) = auction_house_client.poll(Some(Duration::from_secs(1)))? {
                     let mut connection = persistence.get_connection()?;
-                    even_writer.write(&mut connection, &[event_log::EventDetails::AuctionHouse(event)])?;
+                    even_writer.write(
+                        &mut connection,
+                        &[event_log::EventDetails::AuctionHouse(event)],
+                    )?;
                 }
 
                 Ok(())

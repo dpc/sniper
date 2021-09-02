@@ -3,13 +3,16 @@
 //! The logic that based on events from the Ui and Auction House
 //! determines if new bids should be created and of what amount.
 use super::JoinHandle;
-use crate::auction::{Amount, BidDetails, Bidder, ItemBid, ItemId, ItemIdRef};
-use crate::event_log;
-use crate::persistence;
-use crate::service::{auction_house, ui};
+use crate::{
+    auction::{Amount, BidDetails, Bidder, ItemBid, ItemId, ItemIdRef},
+    event_log, persistence,
+    service::{auction_house, ui},
+};
 use anyhow::Result;
-use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+};
 use thiserror::Error;
 
 mod postgres;
@@ -116,7 +119,7 @@ pub enum AuctionError {
     UnknownAuction(ItemId),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Event {
     /// We are placing a bid
     Bid(ItemBid),
@@ -292,17 +295,15 @@ impl Service {
             event_reader,
             move |transaction, event_details| {
                 Ok(match event_details {
-                    event_log::EventDetails::AuctionHouse(event) => {
-                        Self::handle_event_with(
-                            transaction,
-                            &bidding_state_store,
-                            &even_writer,
-                            event.item.clone(),
-                            |old_state| {
-                                Self::handle_auction_house_event(event.item, old_state, event.event)
-                            },
-                        )?
-                    },
+                    event_log::EventDetails::AuctionHouse(event) => Self::handle_event_with(
+                        transaction,
+                        &bidding_state_store,
+                        &even_writer,
+                        event.item.clone(),
+                        |old_state| {
+                            Self::handle_auction_house_event(event.item, old_state, event.event)
+                        },
+                    )?,
                     event_log::EventDetails::Ui(ui::Event::MaxBidSet(item_bid)) => {
                         Self::handle_event_with(
                             transaction,
@@ -313,7 +314,7 @@ impl Service {
                                 Self::handle_max_bid_event(item_bid.item, old_state, item_bid.price)
                             },
                         )?
-                    },
+                    }
                     _ => (),
                 })
             },
@@ -384,26 +385,25 @@ impl Service {
         })
     }
 
-
     fn handle_max_bid_event(
         item_id: ItemId,
         old_state: Option<AuctionBiddingState>,
         price: Amount,
-    ) -> Result<(Option<AuctionBiddingState>, Vec<Event>)>
-    {
+    ) -> Result<(Option<AuctionBiddingState>, Vec<Event>)> {
         let auction_state = old_state.unwrap_or_else(Default::default);
 
         let new_state = auction_state.handle_new_max_bid(price);
 
-        Ok(if new_state != auction_state
-            && new_state
-                .state
-                .higest_bid
-                .map(|bid| bid.bidder != Bidder::Sniper)
-                .unwrap_or(true)
-        {
-            (Some(new_state),
-
+        Ok(
+            if new_state != auction_state
+                && new_state
+                    .state
+                    .higest_bid
+                    .map(|bid| bid.bidder != Bidder::Sniper)
+                    .unwrap_or(true)
+            {
+                (
+                    Some(new_state),
                     new_state
                         .state
                         .get_next_bid(new_state.max_bid)
@@ -414,10 +414,11 @@ impl Service {
                             })
                         })
                         .into_iter()
-                        .collect()
+                        .collect(),
                 )
-        } else {
-            (None, vec![])
-        })
+            } else {
+                (None, vec![])
+            },
+        )
     }
 }

@@ -2,7 +2,7 @@ pub type ItemId = String;
 pub type ItemIdRef<'s> = &'s str;
 pub type Amount = u64;
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Bidder {
     Sniper,
     Other,
@@ -14,13 +14,13 @@ pub struct Bid {
     pub details: BidDetails,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ItemBid {
     pub item: ItemId,
     pub price: Amount,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct BidDetails {
     pub bidder: Bidder,
     pub price: Amount,

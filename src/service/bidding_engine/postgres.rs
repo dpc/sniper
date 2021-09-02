@@ -1,6 +1,6 @@
 use crate::persistence;
-use std::convert::TryFrom;
 use anyhow::Result;
+use std::convert::TryFrom;
 
 pub struct PostgresBiddingStateStore {
     client: postgres::Client,

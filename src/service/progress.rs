@@ -1,10 +1,14 @@
 use super::{ServiceId, ServiceIdRef};
-use crate::event_log::{EventId, EventIdRef};
-use crate::persistence;
+use crate::{
+    event_log::{EventId, EventIdRef},
+    persistence,
+};
 
 use anyhow::Result;
-use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+};
 
 /// A persistent store to keep track of the last processed event
 pub trait ProgressTracker {
