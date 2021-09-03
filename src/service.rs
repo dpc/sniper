@@ -85,7 +85,13 @@ impl<P> ServiceControl<P> {
         let mut progress = {
             match (|| {
                 let mut connection = persistence.get_connection()?;
-                self.progress_store.load(&mut connection, &service_id)
+                Ok(
+                    if let Some(offset) = self.progress_store.load(&mut connection, &service_id)? {
+                        offset
+                    } else {
+                        event_reader.get_start_offset()?
+                    },
+                )
             })() {
                 // to avoid returning a `Result`, on error, spawn a thread that will immediately terminate with an error
                 Err(e) => {
@@ -104,19 +110,17 @@ impl<P> ServiceControl<P> {
                 let mut connection = persistence.get_connection()?;
                 let mut transaction = connection.start_transaction()?;
 
-                for event in event_reader
-                    .read_tr(
-                        &mut transaction,
-                        progress.clone(),
-                        1,
-                        Some(std::time::Duration::from_secs(1)),
-                    )?
-                    .drain(..)
-                {
+                let (new_offset, mut events) = event_reader.read_tr(
+                    &mut transaction,
+                    progress.clone(),
+                    1,
+                    Some(std::time::Duration::from_secs(1)),
+                )?;
+                for event in events.drain(..) {
                     f(&mut transaction, event.details)?;
 
-                    progress = Some(event.id.clone());
-                    progress_store.store_tr(&mut transaction, &service_id, &event.id)?;
+                    progress = new_offset;
+                    progress_store.store_tr(&mut transaction, &service_id, new_offset)?;
                 }
                 transaction.commit()?;
                 Ok(())

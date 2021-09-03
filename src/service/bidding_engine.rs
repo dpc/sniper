@@ -105,7 +105,7 @@ impl BiddingStateStore for InMemoryBiddingStateStore {
     }
 }
 
-#[derive(Error, Debug, Copy, Clone)]
+#[derive(Error, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum UserError {
     #[error("auction already closed")]
     AlreadyClosed,
@@ -113,13 +113,13 @@ pub enum UserError {
     TooLow,
 }
 
-#[derive(Error, Debug, Clone)]
+#[derive(Error, Clone, Debug, PartialEq, Eq)]
 pub enum AuctionError {
     #[error("unknown auction: {0}")]
     UnknownAuction(ItemId),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Event {
     /// We are placing a bid
     Bid(ItemBid),

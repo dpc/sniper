@@ -10,13 +10,13 @@ use anyhow::Result;
 use super::JoinHandle;
 use crate::persistence;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Event {
     pub item: ItemId,
     pub event: EventDetails,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EventDetails {
     Bid(BidDetails),
     Closed,
@@ -68,7 +68,7 @@ impl Service {
             persistence,
             WRITER_ID,
             event_reader,
-            move |transaction, event| match event {
+            move |_transaction, event| match event {
                 event_log::EventDetails::BiddingEngine(event) => match event {
                     bidding_engine::Event::Bid(item_bid) => {
                         auction_house_client.place_bid(&item_bid.item, item_bid.price)
