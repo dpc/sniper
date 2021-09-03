@@ -21,6 +21,20 @@ use crate::event_log;
 pub type ServiceId = String;
 pub type ServiceIdRef<'a> = &'a str;
 
+pub trait Service<P>: Send + Sync
+where
+    P: persistence::Persistence + 'static,
+{
+    fn get_id(&self) -> String;
+
+    fn handle_event<'a>(
+        &mut self,
+        transaction: &mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        event: event_log::EventDetails,
+    ) -> Result<()>;
+}
+
+//        F: for <'a> FnMut(&mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>, event_log::EventDetails) -> Result<()> + Send + Sync + 'static,
 /// An utility control structure to control service execution
 ///
 /// All services are basically a loop, and we would like to be able to
@@ -30,14 +44,31 @@ pub type ServiceIdRef<'a> = &'a str;
 pub struct ServiceControl<P> {
     stop_all: Arc<AtomicBool>,
     progress_store: progress::SharedProgressTracker<P>,
+    persistence: P,
 }
 
-impl<P> ServiceControl<P> {
-    pub fn new(progress_store: progress::SharedProgressTracker<P>) -> Self {
+impl<P> ServiceControl<P>
+where
+    P: persistence::Persistence + 'static,
+{
+    pub fn new(persistence: P, progress_store: progress::SharedProgressTracker<P>) -> Self {
         Self {
             stop_all: Default::default(),
             progress_store,
+            persistence,
         }
+    }
+
+    pub fn spawn(
+        &self,
+        mut service: impl Service<P> + 'static,
+        event_reader: event_log::SharedReader<P>,
+    ) -> JoinHandle {
+        self.spawn_event_loop(
+            &service.get_id(),
+            event_reader,
+            move |transaction, event_details| service.handle_event(transaction, event_details),
+        )
     }
 
     /// Start a new service as a loop, with a certain body
@@ -71,7 +102,6 @@ impl<P> ServiceControl<P> {
 
     pub fn spawn_event_loop<F>(
         &self,
-        persistence: P,
         service_id: ServiceIdRef,
         event_reader: event_log::SharedReader<P>,
         mut f: F,
@@ -84,7 +114,7 @@ impl<P> ServiceControl<P> {
 
         let mut progress = {
             match (|| {
-                let mut connection = persistence.get_connection()?;
+                let mut connection = self.persistence.get_connection()?;
                 Ok(
                     if let Some(offset) = self.progress_store.load(&mut connection, &service_id)? {
                         offset
@@ -106,6 +136,7 @@ impl<P> ServiceControl<P> {
 
         self.spawn_loop({
             let progress_store = self.progress_store.clone();
+            let persistence = self.persistence.clone();
             move || {
                 let mut connection = persistence.get_connection()?;
                 let mut transaction = connection.start_transaction()?;

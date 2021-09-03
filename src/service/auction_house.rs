@@ -48,7 +48,6 @@ impl Service {
         P: persistence::Persistence + 'static,
     {
         let reader_thread = svc_ctl.spawn_loop({
-            let persistence = persistence.clone();
             let auction_house_client = auction_house_client.clone();
             move || {
                 // TODO: no atomicity offered by the auction_house_client interface
@@ -65,7 +64,6 @@ impl Service {
         });
 
         let writer_thread = svc_ctl.spawn_event_loop(
-            persistence,
             WRITER_ID,
             event_reader,
             move |_transaction, event| match event {

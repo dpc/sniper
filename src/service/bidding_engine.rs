@@ -2,11 +2,10 @@
 //!
 //! The logic that based on events from the Ui and Auction House
 //! determines if new bids should be created and of what amount.
-use super::JoinHandle;
 use crate::{
     auction::{Amount, BidDetails, Bidder, ItemBid, ItemId, ItemIdRef},
     event_log, persistence,
-    service::{auction_house, ui},
+    service::{self, auction_house, ui},
 };
 use anyhow::Result;
 use std::{
@@ -274,55 +273,30 @@ impl BiddingEngine {
 
 pub const BIDDING_ENGINE_SERVICE_ID: &'static str = "bidding-engine";
 
-pub struct Service {
-    thread: JoinHandle,
+// pub struct Service {
+//     thread: JoinHandle,
+// }
+
+pub struct BiddingEngine<P> {
+    bidding_state_store: SharedBiddingStateStore<P>,
+    even_writer: event_log::SharedWriter<P>,
 }
 
-impl Service {
-    pub fn new<P>(
-        svc_ctl: &super::ServiceControl<P>,
-        persistence: P,
+impl<P> BiddingEngine<P>
+where
+    P: persistence::Persistence + 'static,
+{
+    pub fn new(
         bidding_state_store: SharedBiddingStateStore<P>,
-        event_reader: event_log::SharedReader<P>,
         even_writer: event_log::SharedWriter<P>,
-    ) -> Self
-    where
-        P: persistence::Persistence + 'static,
-    {
-        let thread = svc_ctl.spawn_event_loop(
-            persistence,
-            BIDDING_ENGINE_SERVICE_ID,
-            event_reader,
-            move |transaction, event_details| {
-                Ok(match event_details {
-                    event_log::EventDetails::AuctionHouse(event) => Self::handle_event_with(
-                        transaction,
-                        &bidding_state_store,
-                        &even_writer,
-                        event.item.clone(),
-                        |old_state| {
-                            Self::handle_auction_house_event(event.item, old_state, event.event)
-                        },
-                    )?,
-                    event_log::EventDetails::Ui(ui::Event::MaxBidSet(item_bid)) => {
-                        Self::handle_event_with(
-                            transaction,
-                            &bidding_state_store,
-                            &even_writer,
-                            item_bid.item.clone(),
-                            |old_state| {
-                                Self::handle_max_bid_event(item_bid.item, old_state, item_bid.price)
-                            },
-                        )?
-                    }
-                    _ => (),
-                })
-            },
-        );
-        Self { thread }
+    ) -> Self {
+        Self {
+            bidding_state_store,
+            even_writer,
+        }
     }
 
-    fn handle_event_with<'a, P>(
+    fn handle_event_with<'a>(
         transaction: &mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
         bidding_state_store: &SharedBiddingStateStore<P>,
         event_writer: &event_log::SharedWriter<P>,
@@ -420,5 +394,38 @@ impl Service {
                 (None, vec![])
             },
         )
+    }
+}
+
+impl<P> service::Service<P> for BiddingEngine<P>
+where
+    P: persistence::Persistence + 'static,
+{
+    fn handle_event<'a>(
+        &mut self,
+        transaction: &mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        event: event_log::EventDetails,
+    ) -> Result<()> {
+        Ok(match event {
+            event_log::EventDetails::AuctionHouse(event) => Self::handle_event_with(
+                transaction,
+                &self.bidding_state_store,
+                &self.even_writer,
+                event.item.clone(),
+                |old_state| Self::handle_auction_house_event(event.item, old_state, event.event),
+            )?,
+            event_log::EventDetails::Ui(ui::Event::MaxBidSet(item_bid)) => Self::handle_event_with(
+                transaction,
+                &self.bidding_state_store,
+                &self.even_writer,
+                item_bid.item.clone(),
+                |old_state| Self::handle_max_bid_event(item_bid.item, old_state, item_bid.price),
+            )?,
+            _ => (),
+        })
+    }
+
+    fn get_id(&self) -> String {
+        BIDDING_ENGINE_SERVICE_ID.into()
     }
 }
