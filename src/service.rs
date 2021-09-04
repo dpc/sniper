@@ -1,11 +1,11 @@
 pub mod auction_house;
 pub mod bidding_engine;
-pub mod progress;
 pub mod ui;
 
 use crate::{
     persistence,
     persistence::{Connection, Transaction},
+    progress,
 };
 use anyhow::{format_err, Result};
 use std::{

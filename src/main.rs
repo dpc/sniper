@@ -7,6 +7,7 @@
 mod auction;
 mod event_log;
 mod persistence;
+mod progress;
 mod service;
 
 use anyhow::Result;
@@ -14,7 +15,7 @@ use anyhow::Result;
 fn main() -> Result<()> {
     let persistence = persistence::InMemoryPersistence::new();
     let (event_writer, event_reader) = event_log::new_in_memory_shared();
-    let progress_store = service::progress::InMemoryProgressTracker::new_shared();
+    let progress_store = progress::InMemoryProgressTracker::new_shared();
     let auction_house_client = service::auction_house::XmppAuctionHouseClient::new_shared();
 
     let svc_ctr = service::ServiceControl::new(persistence.clone(), progress_store);

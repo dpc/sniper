@@ -1,37 +1,10 @@
-use super::{ServiceId, ServiceIdRef};
-use crate::{event_log::Offset, persistence};
-use anyhow::format_err;
-
 use anyhow::Result;
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex, MutexGuard},
 };
 
-/// A persistent store to keep track of the last processed event
-pub trait ProgressTracker {
-    type Persistence: persistence::Persistence;
-    fn load(
-        &self,
-        conn: &mut <<Self as ProgressTracker>::Persistence as persistence::Persistence>::Connection,
-        id: ServiceIdRef,
-    ) -> Result<Option<Offset>>;
-
-    fn store_tr<'a>(
-        &self,
-        conn: &mut <<<Self as ProgressTracker>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
-        id: ServiceIdRef,
-        offset: Offset,
-    ) -> Result<()>;
-    fn load_tr<'a>(
-        &self,
-        conn: &mut <<<Self as ProgressTracker>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
-        id: ServiceIdRef,
-    ) -> Result<Option<Offset>>;
-}
-
-pub type SharedProgressTracker<P> =
-    Arc<dyn ProgressTracker<Persistence = P> + Send + Sync + 'static>;
+use super::*;
 
 pub struct InMemoryProgressTracker {
     store: Mutex<BTreeMap<ServiceId, Offset>>,
