@@ -21,7 +21,7 @@ use crate::event_log;
 pub type ServiceId = String;
 pub type ServiceIdRef<'a> = &'a str;
 
-pub trait Service<P>: Send + Sync
+pub trait LogFollowerService<P>: Send + Sync
 where
     P: persistence::Persistence + 'static,
 {
@@ -63,9 +63,9 @@ where
         self.stop_all.store(true, Ordering::SeqCst);
     }
 
-    pub fn spawn(
+    pub fn spawn_log_follower(
         &self,
-        mut service: impl Service<P> + 'static,
+        mut service: impl LogFollowerService<P> + 'static,
         event_reader: event_log::SharedReader<P>,
     ) -> JoinHandle {
         self.spawn_event_loop(

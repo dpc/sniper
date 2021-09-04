@@ -4,7 +4,7 @@ use crate::{
     event_log,
     persistence::{self, Connection, Persistence},
     service,
-    service::{bidding_engine::*, Service},
+    service::{bidding_engine::*, LogFollowerService},
 };
 use anyhow::Result;
 

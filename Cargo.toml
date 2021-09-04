@@ -9,6 +9,7 @@ edition = "2018"
 thiserror = "*"
 anyhow = "*"
 ctrlc = "*"
+parking_lot = "*"
 
 postgres = "*"
 r2d2 = "*"

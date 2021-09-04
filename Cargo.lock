@@ -610,6 +610,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ctrlc",
+ "parking_lot",
  "postgres",
  "r2d2",
  "r2d2_postgres",

@@ -340,7 +340,7 @@ impl<P> BiddingEngine<P> {
     }
 }
 
-impl<P> service::Service<P> for BiddingEngine<P>
+impl<P> service::LogFollowerService<P> for BiddingEngine<P>
 where
     P: persistence::Persistence + 'static,
 {

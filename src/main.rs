@@ -27,7 +27,7 @@ fn main() -> Result<()> {
     })?;
 
     let bidding_state_store = service::bidding_engine::InMemoryBiddingStateStore::new_shared();
-    let bidding_engine = svc_ctr.spawn(
+    let bidding_engine = svc_ctr.spawn_log_follower(
         service::bidding_engine::BiddingEngine::new(bidding_state_store, event_writer),
         event_reader,
     );
