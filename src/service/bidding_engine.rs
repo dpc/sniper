@@ -368,7 +368,7 @@ where
         })
     }
 
-    fn get_id(&self) -> String {
+    fn get_log_progress_id(&self) -> String {
         BIDDING_ENGINE_SERVICE_ID.into()
     }
 }

@@ -7,8 +7,11 @@ use crate::{
 };
 use anyhow::Result;
 
-use super::JoinHandle;
+use super::*;
 use crate::persistence;
+
+mod xmpp;
+pub use self::xmpp::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Event {
@@ -29,57 +32,85 @@ pub trait AuctionHouseClient {
 
 pub type SharedAuctionHouseClient = Arc<dyn AuctionHouseClient + Send + Sync + 'static>;
 
-pub struct Service {
-    reader_thread: JoinHandle,
-    writer_thread: JoinHandle,
+pub struct AuctionHouseSender {
+    auction_house_client: SharedAuctionHouseClient,
 }
 
-pub const WRITER_ID: &'static str = "auction-house-reader";
+impl AuctionHouseSender {
+    pub fn new(auction_house_client: SharedAuctionHouseClient) -> Self {
+        Self {
+            auction_house_client,
+        }
+    }
+}
 
-impl Service {
-    fn new<P>(
-        svc_ctl: super::ServiceControl<P>,
-        persistence: P,
-        event_reader: event_log::SharedReader<P>,
-        even_writer: event_log::SharedWriter<P>,
-        auction_house_client: SharedAuctionHouseClient,
-    ) -> Self
-    where
-        P: persistence::Persistence + 'static,
-    {
-        let reader_thread = svc_ctl.spawn_loop({
-            let auction_house_client = auction_house_client.clone();
-            move || {
-                // TODO: no atomicity offered by the auction_house_client interface
-                if let Some(event) = auction_house_client.poll(Some(Duration::from_secs(1)))? {
-                    let mut connection = persistence.get_connection()?;
-                    even_writer.write(
-                        &mut connection,
-                        &[event_log::EventDetails::AuctionHouse(event)],
-                    )?;
+impl<P> LogFollowerService<P> for AuctionHouseSender
+where
+    P: persistence::Persistence + 'static,
+{
+    fn get_log_progress_id(&self) -> String {
+        "auction-house-sender".to_owned()
+    }
+
+    fn handle_event<'a>(
+        &mut self,
+        _transaction: &mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        event: event_log::EventDetails,
+    ) -> Result<()> {
+        match event {
+            event_log::EventDetails::BiddingEngine(event) => match event {
+                bidding_engine::Event::Bid(item_bid) => {
+                    // Note: we rely on idempotency of this call to the server here
+                    self.auction_house_client
+                        .place_bid(&item_bid.item, item_bid.price)
                 }
-
-                Ok(())
-            }
-        });
-
-        let writer_thread = svc_ctl.spawn_event_loop(
-            WRITER_ID,
-            event_reader,
-            move |_transaction, event| match event {
-                event_log::EventDetails::BiddingEngine(event) => match event {
-                    bidding_engine::Event::Bid(item_bid) => {
-                        auction_house_client.place_bid(&item_bid.item, item_bid.price)
-                    }
-                    _ => Ok(()),
-                },
                 _ => Ok(()),
             },
-        );
-
-        Self {
-            reader_thread,
-            writer_thread,
+            _ => Ok(()),
         }
+    }
+}
+
+pub struct AuctionHouseReceiver<P> {
+    persistence: P,
+    even_writer: event_log::SharedWriter<P>,
+    auction_house_client: SharedAuctionHouseClient,
+}
+
+impl<P> AuctionHouseReceiver<P>
+where
+    P: persistence::Persistence + 'static,
+{
+    pub fn new(
+        persistence: P,
+        even_writer: event_log::SharedWriter<P>,
+        auction_house_client: SharedAuctionHouseClient,
+    ) -> Self {
+        Self {
+            persistence,
+            auction_house_client,
+            even_writer,
+        }
+    }
+}
+
+impl<P> LoopService for AuctionHouseReceiver<P>
+where
+    P: persistence::Persistence + 'static,
+{
+    fn run_iteration<'a>(&mut self) -> Result<()> {
+        // TODO: no atomicity offered by the auction_house_client interface
+        if let Some(event) = self
+            .auction_house_client
+            .poll(Some(Duration::from_secs(1)))?
+        {
+            let mut connection = self.persistence.get_connection()?;
+            self.even_writer.write(
+                &mut connection,
+                &[event_log::EventDetails::AuctionHouse(event)],
+            )?;
+        }
+
+        Ok(())
     }
 }

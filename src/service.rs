@@ -25,13 +25,17 @@ pub trait LogFollowerService<P>: Send + Sync
 where
     P: persistence::Persistence + 'static,
 {
-    fn get_id(&self) -> String;
+    fn get_log_progress_id(&self) -> String;
 
     fn handle_event<'a>(
         &mut self,
         transaction: &mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
         event: event_log::EventDetails,
     ) -> Result<()>;
+}
+
+pub trait LoopService: Send + Sync {
+    fn run_iteration<'a>(&mut self) -> Result<()>;
 }
 
 //        F: for <'a> FnMut(&mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>, event_log::EventDetails) -> Result<()> + Send + Sync + 'static,
@@ -69,17 +73,21 @@ where
         event_reader: event_log::SharedReader<P>,
     ) -> JoinHandle {
         self.spawn_event_loop(
-            &service.get_id(),
+            &service.get_log_progress_id(),
             event_reader,
             move |transaction, event_details| service.handle_event(transaction, event_details),
         )
+    }
+
+    pub fn spawn_loop(&self, mut service: impl LoopService + 'static) -> JoinHandle {
+        self.spawn_loop_raw(move || service.run_iteration())
     }
 
     /// Start a new service as a loop, with a certain body
     ///
     /// This will take care of checking termination condition and
     /// handling any errors returned by `f`
-    pub fn spawn_loop<F>(&self, mut f: F) -> JoinHandle
+    pub fn spawn_loop_raw<F>(&self, mut f: F) -> JoinHandle
     where
         F: FnMut() -> Result<()> + Send + Sync + 'static,
     {
@@ -138,7 +146,7 @@ where
             }
         };
 
-        self.spawn_loop({
+        self.spawn_loop_raw({
             let progress_store = self.progress_store.clone();
             let persistence = self.persistence.clone();
             move || {

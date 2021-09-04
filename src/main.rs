@@ -15,8 +15,9 @@ fn main() -> Result<()> {
     let persistence = persistence::InMemoryPersistence::new();
     let (event_writer, event_reader) = event_log::new_in_memory_shared();
     let progress_store = service::progress::InMemoryProgressTracker::new_shared();
+    let auction_house_client = service::auction_house::XmppAuctionHouseClient::new_shared();
 
-    let svc_ctr = service::ServiceControl::new(persistence, progress_store);
+    let svc_ctr = service::ServiceControl::new(persistence.clone(), progress_store);
 
     ctrlc::set_handler({
         let svc_ctr = svc_ctr.clone();
@@ -27,12 +28,23 @@ fn main() -> Result<()> {
     })?;
 
     let bidding_state_store = service::bidding_engine::InMemoryBiddingStateStore::new_shared();
-    let bidding_engine = svc_ctr.spawn_log_follower(
-        service::bidding_engine::BiddingEngine::new(bidding_state_store, event_writer),
-        event_reader,
-    );
-
-    bidding_engine.join()?;
+    for handle in vec![
+        svc_ctr.spawn_log_follower(
+            service::bidding_engine::BiddingEngine::new(bidding_state_store, event_writer.clone()),
+            event_reader.clone(),
+        ),
+        svc_ctr.spawn_loop(service::auction_house::AuctionHouseReceiver::new(
+            persistence.clone(),
+            event_writer.clone(),
+            auction_house_client.clone(),
+        )),
+        svc_ctr.spawn_log_follower(
+            service::auction_house::AuctionHouseSender::new(auction_house_client.clone()),
+            event_reader.clone(),
+        ),
+    ] {
+        handle.join()?
+    }
 
     Ok(())
 }
