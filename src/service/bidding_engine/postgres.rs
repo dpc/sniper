@@ -9,13 +9,14 @@ pub struct PostgresBiddingStateStore {
 impl super::BiddingStateStore for PostgresBiddingStateStore {
     type Persistence = persistence::postgres::PostgresPersistence;
 
-    fn load(
+    #[allow(unreachable_code)]
+    fn load_tr(
         &self,
-        conn: &mut persistence::postgres::PostgresConnection,
+        conn: &mut persistence::postgres::PostgresTransaction,
         item_id: crate::auction::ItemIdRef,
     ) -> anyhow::Result<Option<super::AuctionBiddingState>> {
         Ok(
-            conn.client.query_opt("SELECT max_bid, higest_bid_bidder, higest_bid_price, highest_bid_increment, closed FROM bidding_state", &[])?
+            conn.query_opt("SELECT max_bid, higest_bid_bidder, higest_bid_price, highest_bid_increment, closed FROM bidding_state WHERE item_id = $0", &[&item_id])?
             .map::<Result<_>, _>(|row| {
             Ok(super::AuctionBiddingState {
                 max_bid: u64::try_from(row.get::<'_, _, i64>("max_bid"))?,
@@ -27,28 +28,11 @@ impl super::BiddingStateStore for PostgresBiddingStateStore {
         }).transpose()?)
     }
 
-    fn store(
+    fn store_tr(
         &self,
-        conn: &mut persistence::postgres::PostgresConnection,
-        item_id: crate::auction::ItemIdRef,
-        state: super::AuctionBiddingState,
-    ) -> anyhow::Result<()> {
-        todo!()
-    }
-
-    fn load_tr<'a>(
-        &self,
-        conn: &mut persistence::postgres::PostgresTransaction<'a>,
-        item_id: crate::auction::ItemIdRef,
-    ) -> anyhow::Result<Option<super::AuctionBiddingState>> {
-        todo!()
-    }
-
-    fn store_tr<'a>(
-        &self,
-        conn: &mut persistence::postgres::PostgresTransaction<'a>,
-        item_id: crate::auction::ItemIdRef,
-        state: super::AuctionBiddingState,
+        _conn: &mut persistence::postgres::PostgresTransaction,
+        _item_id: crate::auction::ItemIdRef,
+        _state: super::AuctionBiddingState,
     ) -> anyhow::Result<()> {
         todo!()
     }

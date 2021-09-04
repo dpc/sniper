@@ -4,7 +4,8 @@
 //! determines if new bids should be created and of what amount.
 use crate::{
     auction::{Amount, BidDetails, Bidder, ItemBid, ItemId, ItemIdRef},
-    event_log, persistence,
+    event_log,
+    persistence::{self, Connection},
     service::{self, auction_house, ui},
 };
 use anyhow::Result;
@@ -19,29 +20,35 @@ mod postgres;
 /// A store for the current state of each auction we participate in
 pub trait BiddingStateStore {
     type Persistence: persistence::Persistence;
-    fn load(
-        &self,
-        conn: &mut <<Self as BiddingStateStore>::Persistence as persistence::Persistence>::Connection,
-        item_id: ItemIdRef,
-    ) -> Result<Option<AuctionBiddingState>>;
-    fn store(
-        &self,
-        conn: &mut <<Self as BiddingStateStore>::Persistence as persistence::Persistence>::Connection,
-        item_id: ItemIdRef,
-        state: AuctionBiddingState,
-    ) -> Result<()>;
-
     fn load_tr<'a>(
         &self,
         conn: &mut <<<Self as BiddingStateStore>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
         item_id: ItemIdRef,
     ) -> Result<Option<AuctionBiddingState>>;
+
     fn store_tr<'a>(
         &self,
         conn: &mut <<<Self as BiddingStateStore>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
         item_id: ItemIdRef,
         state: AuctionBiddingState,
     ) -> Result<()>;
+
+    fn load(
+        &self,
+        conn: &mut <<Self as BiddingStateStore>::Persistence as persistence::Persistence>::Connection,
+        item_id: ItemIdRef,
+    ) -> Result<Option<AuctionBiddingState>> {
+        self.load_tr(&mut conn.start_transaction()?, item_id)
+    }
+
+    fn store(
+        &self,
+        conn: &mut <<Self as BiddingStateStore>::Persistence as persistence::Persistence>::Connection,
+        item_id: ItemIdRef,
+        state: AuctionBiddingState,
+    ) -> Result<()> {
+        self.store_tr(&mut conn.start_transaction()?, item_id, state)
+    }
 }
 
 pub type SharedBiddingStateStore<P> = Arc<dyn BiddingStateStore<Persistence = P> + Send + Sync>;
@@ -61,30 +68,9 @@ impl InMemoryBiddingStateStore {
 impl BiddingStateStore for InMemoryBiddingStateStore {
     type Persistence = persistence::InMemoryPersistence;
 
-    fn load(
-        &self,
-        conn: &mut persistence::InMemoryConnection,
-        item_id: ItemIdRef,
-    ) -> Result<Option<AuctionBiddingState>> {
-        Ok(self.0.lock().expect("lock").get(item_id).cloned())
-    }
-
-    fn store(
-        &self,
-        conn: &mut persistence::InMemoryConnection,
-        item_id: ItemIdRef,
-        state: AuctionBiddingState,
-    ) -> Result<()> {
-        self.0
-            .lock()
-            .expect("lock")
-            .insert(item_id.to_owned(), state);
-        Ok(())
-    }
-
     fn load_tr<'a>(
         &self,
-        conn: &mut persistence::InMemoryTransaction,
+        _conn: &mut persistence::InMemoryTransaction,
         item_id: ItemIdRef,
     ) -> Result<Option<AuctionBiddingState>> {
         Ok(self.0.lock().expect("lock").get(item_id).cloned())
@@ -92,7 +78,7 @@ impl BiddingStateStore for InMemoryBiddingStateStore {
 
     fn store_tr<'a>(
         &self,
-        conn: &mut persistence::InMemoryTransaction,
+        _conn: &mut persistence::InMemoryTransaction,
         item_id: ItemIdRef,
         state: AuctionBiddingState,
     ) -> Result<()> {
@@ -128,10 +114,10 @@ pub enum Event {
     UserError(UserError),
 }
 
-#[derive(Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Default, Copy, Clone, PartialEq, Eq, Debug)]
 pub struct AuctionState {
-    higest_bid: Option<BidDetails>,
-    closed: bool,
+    pub higest_bid: Option<BidDetails>,
+    pub closed: bool,
 }
 
 impl AuctionState {
@@ -214,10 +200,10 @@ impl AuctionState {
     }
 }
 
-#[derive(Copy, Clone, Default, PartialEq)]
+#[derive(Copy, Clone, Default, PartialEq, Debug)]
 pub struct AuctionBiddingState {
-    max_bid: Amount,
-    state: AuctionState,
+    pub max_bid: Amount,
+    pub state: AuctionState,
 }
 
 impl AuctionBiddingState {
@@ -235,57 +221,14 @@ impl AuctionBiddingState {
     }
 }
 
-/*
-pub struct BiddingEngineShared {
-    store: OwnedBiddingStateStore,
-    auction_rpc: OwnedAuctionRpc,
-    stop_rpc_thread: atomic::AtomicBool,
-}
-
-
-pub struct BiddingEngine {
-    shared: Arc<BiddingEngineShared>,
-    rpc_thread: thread::JoinHandle<()>,
-}
-
-impl BiddingEngine {
-    fn new(store: OwnedBiddingStateStore, auction_rpc: OwnedAuctionRpc) -> Self {
-        let shared = Arc::new(BiddingEngineShared {
-            store,
-            auction_rpc,
-            stop_rpc_thread: atomic::AtomicBool::new(false),
-        });
-
-        let rpc_thread = thread::spawn({
-            let shared = shared.clone();
-            move || shared.run_rpc_thread()
-        });
-
-        Self { shared, rpc_thread }
-    }
-
-    pub fn bid_for_item(&self, item_id: ItemIdRef, max_price: Amount) -> Result<Option<Action>> {
-        self.shared.bid_for_item(item_id, max_price)
-    }
-}
-
-*/
-
 pub const BIDDING_ENGINE_SERVICE_ID: &'static str = "bidding-engine";
-
-// pub struct Service {
-//     thread: JoinHandle,
-// }
 
 pub struct BiddingEngine<P> {
     bidding_state_store: SharedBiddingStateStore<P>,
     even_writer: event_log::SharedWriter<P>,
 }
 
-impl<P> BiddingEngine<P>
-where
-    P: persistence::Persistence + 'static,
-{
+impl<P> BiddingEngine<P> {
     pub fn new(
         bidding_state_store: SharedBiddingStateStore<P>,
         even_writer: event_log::SharedWriter<P>,
@@ -325,7 +268,7 @@ where
         Ok(())
     }
 
-    fn handle_auction_house_event(
+    pub fn handle_auction_house_event(
         item_id: ItemId,
         old_state: Option<AuctionBiddingState>,
         event: crate::service::auction_house::EventDetails,
@@ -359,7 +302,7 @@ where
         })
     }
 
-    fn handle_max_bid_event(
+    pub fn handle_max_bid_event(
         item_id: ItemId,
         old_state: Option<AuctionBiddingState>,
         price: Amount,

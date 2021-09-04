@@ -10,21 +10,6 @@ use crate::service::{auction_house, bidding_engine, ui};
 
 pub type Offset = u64;
 
-/*
-pub fn format_numeric_id(num: u64) -> String {
-    format!("{:0>10}", num)
-}
-
-pub fn increment_id(id: &EventId) -> EventId {
-    format_numeric_id(
-        id.parse::<u64>()
-            .expect("valid id")
-            .checked_add(1)
-            .expect("no overflow"),
-    )
-}
-*/
-
 // TODO: This type makes everything cyclical:
 // All services depend on it, and it depends
 // on events of each of the services. Not a
@@ -50,6 +35,14 @@ pub trait Reader {
 
     fn get_start_offset(&self) -> Result<Offset>;
 
+    fn read_tr<'a>(
+        &self,
+        conn: &mut <<<Self as Reader>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        offset: Offset,
+        limit: usize,
+        timeout: Option<Duration>,
+    ) -> Result<(Offset, Vec<Event>)>;
+
     fn read<'a>(
         &self,
         conn: &mut <<Self as Reader>::Persistence as persistence::Persistence>::Connection,
@@ -60,13 +53,25 @@ pub trait Reader {
         self.read_tr(&mut conn.start_transaction()?, offset, limit, timeout)
     }
 
-    fn read_tr<'a>(
+    fn read_one_tr<'a>(
         &self,
         conn: &mut <<<Self as Reader>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
         offset: Offset,
-        limit: usize,
-        timeout: Option<Duration>,
-    ) -> Result<(Offset, Vec<Event>)>;
+    ) -> Result<(Offset, Option<Event>)> {
+        let (offset, v) = self.read_tr(conn, offset, 1, Some(Duration::from_millis(0)))?;
+        assert!(v.len() <= 1);
+        Ok((offset, v.into_iter().next()))
+    }
+
+    fn read_one<'a>(
+        &self,
+        conn: &mut <<Self as Reader>::Persistence as persistence::Persistence>::Connection,
+        offset: Offset,
+    ) -> Result<(Offset, Option<Event>)> {
+        let (offset, v) = self.read(conn, offset, 1, Some(Duration::from_millis(0)))?;
+        assert!(v.len() <= 1);
+        Ok((offset, v.into_iter().next()))
+    }
 }
 
 pub trait Writer {
@@ -94,16 +99,6 @@ type InMemoryLogInner = Vec<EventDetails>;
 pub struct InMemoryLog(RwLock<InMemoryLogInner>);
 
 impl InMemoryLog {
-    /*
-    pub fn get_last_id(inner: &InMemoryLogInner) -> Option<Offset> {
-        inner.last_key_value().map(|(k, v)| k.to_owned())
-    }
-
-    pub fn get_next_id(inner: &InMemoryLogInner) -> Offset {
-        increment_id(&Self::get_last_id(inner).unwrap_or_else(|| format_numeric_id(0)))
-    }
-    */
-
     pub fn read<'a>(&'a self) -> RwLockReadGuard<'a, InMemoryLogInner> {
         self.0.read().expect("lock")
     }

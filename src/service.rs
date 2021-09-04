@@ -59,6 +59,10 @@ where
         }
     }
 
+    pub fn stop_all(&self) {
+        self.stop_all.store(true, Ordering::SeqCst);
+    }
+
     pub fn spawn(
         &self,
         mut service: impl Service<P> + 'static,
@@ -180,7 +184,6 @@ impl JoinHandle {
 
 impl JoinHandle {
     fn join_mut(&mut self) -> Result<()> {
-        self.stop.store(true, Ordering::SeqCst);
         if let Some(h) = self.thread.take() {
             h.join().map_err(|e| format_err!("join failed: {:?}", e))?
         } else {
@@ -188,6 +191,7 @@ impl JoinHandle {
         }
     }
 
+    #[allow(unused)]
     pub fn join(mut self) -> Result<()> {
         self.join_mut()
     }
@@ -195,6 +199,7 @@ impl JoinHandle {
 
 impl Drop for JoinHandle {
     fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
         self.join_mut().expect("not failed")
     }
 }
