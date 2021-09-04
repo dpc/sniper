@@ -21,6 +21,7 @@ use crate::event_log;
 pub type ServiceId = String;
 pub type ServiceIdRef<'a> = &'a str;
 
+/// A service that handles events on the log
 pub trait LogFollowerService<P>: Send + Sync
 where
     P: persistence::Persistence + 'static,
@@ -34,16 +35,16 @@ where
     ) -> Result<()>;
 }
 
+/// A service that is a loop that does something
 pub trait LoopService: Send + Sync {
     fn run_iteration<'a>(&mut self) -> Result<()>;
 }
 
-//        F: for <'a> FnMut(&mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>, event_log::EventDetails) -> Result<()> + Send + Sync + 'static,
-/// An utility control structure to control service execution
+/// Service execution control instance
 ///
 /// All services are basically a loop, and we would like to be able to
 /// gracefully terminate them, and handle and top-level error of any
-/// of them by stopping everything.
+/// of them by gracefully stopping everything else.
 #[derive(Clone)]
 pub struct ServiceControl<P> {
     stop_all: Arc<AtomicBool>,
@@ -87,7 +88,7 @@ where
     ///
     /// This will take care of checking termination condition and
     /// handling any errors returned by `f`
-    pub fn spawn_loop_raw<F>(&self, mut f: F) -> JoinHandle
+    fn spawn_loop_raw<F>(&self, mut f: F) -> JoinHandle
     where
         F: FnMut() -> Result<()> + Send + Sync + 'static,
     {
@@ -112,7 +113,7 @@ where
         )
     }
 
-    pub fn spawn_event_loop<F>(
+    fn spawn_event_loop<F>(
         &self,
         service_id: ServiceIdRef,
         event_reader: event_log::SharedReader<P>,
@@ -135,7 +136,8 @@ where
                     },
                 )
             })() {
-                // to avoid returning a `Result`, on error, spawn a thread that will immediately terminate with an error
+                // To avoid returning a `Result` directly from here, spawn a thread that will immediately terminate with an error,
+                // just like the initial progress load was done from the spawned thread itself.
                 Err(e) => {
                     return JoinHandle::new(
                         Arc::new(AtomicBool::new(false)),
