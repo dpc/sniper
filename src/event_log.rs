@@ -1,4 +1,4 @@
-use crate::persistence::{self, Connection};
+use crate::persistence::{self, Connection, Transaction};
 use anyhow::{format_err, Result};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::{convert::TryFrom, sync::Arc, time::Duration};
@@ -67,13 +67,11 @@ pub struct Event {
 }
 
 pub trait Reader {
-    type Persistence: persistence::Persistence;
-
     fn get_start_offset(&self) -> Result<Offset>;
 
     fn read_tr<'a>(
         &self,
-        conn: &mut <<<Self as Reader>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        conn: &mut Transaction<'a>,
         offset: Offset,
         limit: usize,
         timeout: Option<Duration>,
@@ -81,7 +79,7 @@ pub trait Reader {
 
     fn read<'a>(
         &self,
-        conn: &mut <<Self as Reader>::Persistence as persistence::Persistence>::Connection,
+        conn: &mut Connection,
         offset: Offset,
         limit: usize,
         timeout: Option<Duration>,
@@ -91,7 +89,7 @@ pub trait Reader {
 
     fn read_one_tr<'a>(
         &self,
-        conn: &mut <<<Self as Reader>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        conn: &mut Transaction<'a>,
         offset: Offset,
     ) -> Result<(Offset, Option<Event>)> {
         let (offset, v) = self.read_tr(conn, offset, 1, Some(Duration::from_millis(0)))?;
@@ -101,7 +99,7 @@ pub trait Reader {
 
     fn read_one<'a>(
         &self,
-        conn: &mut <<Self as Reader>::Persistence as persistence::Persistence>::Connection,
+        conn: &mut Connection,
         offset: Offset,
     ) -> Result<(Offset, Option<Event>)> {
         let (offset, v) = self.read(conn, offset, 1, Some(Duration::from_millis(0)))?;
@@ -111,22 +109,12 @@ pub trait Reader {
 }
 
 pub trait Writer {
-    type Persistence: persistence::Persistence;
-
-    fn write(
-        &self,
-        conn: &mut <<Self as Writer>::Persistence as persistence::Persistence>::Connection,
-        events: &[EventDetails],
-    ) -> Result<Offset> {
+    fn write(&self, conn: &mut Connection, events: &[EventDetails]) -> Result<Offset> {
         self.write_tr(&mut conn.start_transaction()?, events)
     }
 
-    fn write_tr<'a>(
-        &self,
-        conn: &mut <<<Self as Writer>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
-        events: &[EventDetails],
-    ) -> Result<Offset>;
+    fn write_tr<'a>(&self, conn: &mut Transaction<'a>, events: &[EventDetails]) -> Result<Offset>;
 }
 
-pub type SharedReader<P> = Arc<dyn Reader<Persistence = P> + Sync + Send + 'static>;
-pub type SharedWriter<P> = Arc<dyn Writer<Persistence = P> + Sync + Send + 'static>;
+pub type SharedReader = Arc<dyn Reader + Sync + Send + 'static>;
+pub type SharedWriter = Arc<dyn Writer + Sync + Send + 'static>;

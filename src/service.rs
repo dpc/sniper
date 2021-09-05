@@ -4,7 +4,7 @@ pub mod ui;
 
 use crate::{
     persistence,
-    persistence::{Connection, Transaction},
+    persistence::{Connection, Persistence, Transaction},
     progress,
 };
 use anyhow::{format_err, Result};
@@ -21,15 +21,12 @@ use crate::event_log;
 pub type ServiceId = String;
 pub type ServiceIdRef<'a> = &'a str;
 
-pub trait LogFollowerService<P>: Send + Sync
-where
-    P: persistence::Persistence + 'static,
-{
+pub trait LogFollowerService: Send + Sync {
     fn get_log_progress_id(&self) -> String;
 
     fn handle_event<'a>(
         &mut self,
-        transaction: &mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        transaction: &mut Transaction<'a>,
         event: event_log::EventDetails,
     ) -> Result<()>;
 }
@@ -38,24 +35,21 @@ pub trait LoopService: Send + Sync {
     fn run_iteration<'a>(&mut self) -> Result<()>;
 }
 
-//        F: for <'a> FnMut(&mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>, event_log::EventDetails) -> Result<()> + Send + Sync + 'static,
+//        F: for <'a> FnMut(&mut Transaction<'a>, event_log::EventDetails) -> Result<()> + Send + Sync + 'static,
 /// An utility control structure to control service execution
 ///
 /// All services are basically a loop, and we would like to be able to
 /// gracefully terminate them, and handle and top-level error of any
 /// of them by stopping everything.
 #[derive(Clone)]
-pub struct ServiceControl<P> {
+pub struct ServiceControl {
     stop_all: Arc<AtomicBool>,
-    progress_store: progress::SharedProgressTracker<P>,
-    persistence: P,
+    progress_store: progress::SharedProgressTracker,
+    persistence: Persistence,
 }
 
-impl<P> ServiceControl<P>
-where
-    P: persistence::Persistence + 'static,
-{
-    pub fn new(persistence: P, progress_store: progress::SharedProgressTracker<P>) -> Self {
+impl ServiceControl {
+    pub fn new(persistence: Persistence, progress_store: progress::SharedProgressTracker) -> Self {
         Self {
             stop_all: Default::default(),
             progress_store,
@@ -69,8 +63,8 @@ where
 
     pub fn spawn_log_follower(
         &self,
-        mut service: impl LogFollowerService<P> + 'static,
-        event_reader: event_log::SharedReader<P>,
+        mut service: impl LogFollowerService + 'static,
+        event_reader: event_log::SharedReader,
     ) -> JoinHandle {
         self.spawn_event_loop(
             &service.get_log_progress_id(),
@@ -115,12 +109,14 @@ where
     pub fn spawn_event_loop<F>(
         &self,
         service_id: ServiceIdRef,
-        event_reader: event_log::SharedReader<P>,
+        event_reader: event_log::SharedReader,
         mut f: F,
     ) -> JoinHandle
     where
-        F: for <'a> FnMut(&mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>, event_log::EventDetails) -> Result<()> + Send + Sync + 'static,
-        P: persistence::Persistence + 'static,
+        F: for<'a> FnMut(&mut Transaction<'a>, event_log::EventDetails) -> Result<()>
+            + Send
+            + Sync
+            + 'static,
     {
         let service_id = service_id.to_owned();
 

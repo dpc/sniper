@@ -3,7 +3,7 @@
 #![feature(generic_associated_types)]
 // since we're already on nightly...
 #![feature(map_first_last)]
-
+#![allow(unused)]
 mod auction;
 mod event_log;
 mod persistence;
@@ -13,7 +13,7 @@ mod service;
 use anyhow::Result;
 
 fn main() -> Result<()> {
-    let persistence = persistence::InMemoryPersistence::new();
+    let persistence = persistence::in_memory::new();
     let (event_writer, event_reader) = event_log::new_in_memory_shared();
     let progress_store = progress::InMemoryProgressTracker::new_shared();
     let auction_house_client = service::auction_house::XmppAuctionHouseClient::new_shared();
@@ -28,10 +28,9 @@ fn main() -> Result<()> {
         }
     })?;
 
-    let bidding_state_store = service::bidding_engine::InMemoryBiddingStateStore::new_shared();
     for handle in vec![
         svc_ctr.spawn_log_follower(
-            service::bidding_engine::BiddingEngine::new(bidding_state_store, event_writer.clone()),
+            service::bidding_engine::BiddingEngine::new(event_writer.clone()),
             event_reader.clone(),
         ),
         svc_ctr.spawn_loop(service::auction_house::AuctionHouseReceiver::new(

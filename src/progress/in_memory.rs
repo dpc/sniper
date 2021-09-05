@@ -17,7 +17,7 @@ impl InMemoryProgressTracker {
         }
     }
 
-    pub fn new_shared() -> SharedProgressTracker<persistence::InMemoryPersistence> {
+    pub fn new_shared() -> SharedProgressTracker {
         Arc::new(Self::new())
     }
 
@@ -29,19 +29,13 @@ impl InMemoryProgressTracker {
 }
 
 impl ProgressTracker for InMemoryProgressTracker {
-    type Persistence = persistence::InMemoryPersistence;
-
-    fn load<'a>(
-        &self,
-        _conn: &mut persistence::InMemoryConnection,
-        id: ServiceIdRef,
-    ) -> Result<Option<Offset>> {
+    fn load<'a>(&self, _conn: &mut Connection, id: ServiceIdRef) -> Result<Option<Offset>> {
         Ok(self.lock()?.get(id).cloned())
     }
 
     fn store_tr<'a>(
         &self,
-        _conn: &mut persistence::InMemoryTransaction,
+        _conn: &mut Transaction<'a>,
         id: ServiceIdRef,
         event_id: Offset,
     ) -> Result<()> {
@@ -49,11 +43,7 @@ impl ProgressTracker for InMemoryProgressTracker {
         Ok(())
     }
 
-    fn load_tr<'a>(
-        &self,
-        _conn: &mut persistence::InMemoryTransaction,
-        id: ServiceIdRef,
-    ) -> Result<Option<Offset>> {
+    fn load_tr<'a>(&self, _conn: &mut Transaction<'a>, id: ServiceIdRef) -> Result<Option<Offset>> {
         Ok(self.lock()?.get(id).cloned())
     }
 }

@@ -44,17 +44,14 @@ impl AuctionHouseSender {
     }
 }
 
-impl<P> LogFollowerService<P> for AuctionHouseSender
-where
-    P: persistence::Persistence + 'static,
-{
+impl LogFollowerService for AuctionHouseSender {
     fn get_log_progress_id(&self) -> String {
         "auction-house-sender".to_owned()
     }
 
     fn handle_event<'a>(
         &mut self,
-        _transaction: &mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        _transaction: &mut Transaction<'a>,
         event: event_log::EventDetails,
     ) -> Result<()> {
         match event {
@@ -71,19 +68,16 @@ where
     }
 }
 
-pub struct AuctionHouseReceiver<P> {
-    persistence: P,
-    even_writer: event_log::SharedWriter<P>,
+pub struct AuctionHouseReceiver {
+    persistence: Persistence,
+    even_writer: event_log::SharedWriter,
     auction_house_client: SharedAuctionHouseClient,
 }
 
-impl<P> AuctionHouseReceiver<P>
-where
-    P: persistence::Persistence + 'static,
-{
+impl AuctionHouseReceiver {
     pub fn new(
-        persistence: P,
-        even_writer: event_log::SharedWriter<P>,
+        persistence: Persistence,
+        even_writer: event_log::SharedWriter,
         auction_house_client: SharedAuctionHouseClient,
     ) -> Self {
         Self {
@@ -94,10 +88,7 @@ where
     }
 }
 
-impl<P> LoopService for AuctionHouseReceiver<P>
-where
-    P: persistence::Persistence + 'static,
-{
+impl LoopService for AuctionHouseReceiver {
     fn run_iteration<'a>(&mut self) -> Result<()> {
         // TODO: no atomicity offered by the auction_house_client interface
         if let Some(event) = self

@@ -9,7 +9,7 @@ use anyhow::Result;
 
 #[test]
 fn event_logs_sanity_check() -> Result<()> {
-    let persistence = persistence::InMemoryPersistence::new();
+    let persistence = persistence::in_memory::new();
     let (event_writer, event_reader) = event_log::new_in_memory_shared();
 
     let start_offset = event_reader.get_start_offset()?;

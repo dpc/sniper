@@ -8,25 +8,19 @@ use crate::{
 };
 use anyhow::Result;
 
-trait BiddingEngineTestExt<P>
-where
-    P: Persistence,
-{
+trait BiddingEngineTestExt {
     fn handle_max_bid_event(
         &mut self,
-        conn: &mut <P as Persistence>::Connection,
+        conn: &mut Connection,
         id: ItemIdRef,
         price: Amount,
     ) -> Result<()>;
 }
 
-impl<P> BiddingEngineTestExt<P> for BiddingEngine<P>
-where
-    P: Persistence + 'static,
-{
+impl BiddingEngineTestExt for BiddingEngine {
     fn handle_max_bid_event<'a>(
         &mut self,
-        conn: &mut <P as Persistence>::Connection,
+        conn: &mut Connection,
         id: ItemIdRef,
         price: Amount,
     ) -> Result<()> {
@@ -42,14 +36,12 @@ where
 
 #[test]
 fn sanity_check_sends_a_bid_when_asked_to_via_event_log() -> Result<()> {
-    let persistence = persistence::InMemoryPersistence::new();
+    let persistence = persistence::in_memory::new();
     let mut conn = persistence.get_connection()?;
 
     let (event_writer, event_reader) = event_log::new_in_memory_shared();
-    let bidding_state_store = service::bidding_engine::InMemoryBiddingStateStore::new_shared();
 
-    let mut bidding_engine =
-        service::bidding_engine::BiddingEngine::new(bidding_state_store, event_writer);
+    let mut bidding_engine = service::bidding_engine::BiddingEngine::new(event_writer);
 
     bidding_engine.handle_max_bid_event(&mut conn, "foo", 100)?;
 
@@ -89,7 +81,7 @@ fn sends_a_bid_when_asked_to() -> Result<()> {
             service::bidding_engine::BiddingEngine::new(bidding_state_store, event_writer);
     */
     assert_eq!(
-        BiddingEngine::<()>::handle_max_bid_event("foo".to_string(), None, 100)?,
+        BiddingEngine::handle_max_bid_event("foo".to_string(), None, 100)?,
         (
             Some(AuctionBiddingState {
                 max_bid: 100,

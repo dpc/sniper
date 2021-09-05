@@ -8,91 +8,80 @@
 //!
 //! * https://www.reddit.com/r/rust/comments/p9amqt/hexagonal_architecture_in_rust_1/h9ypjoo?utm_source=share&utm_medium=web2x&context=3
 //! * https://www.reddit.com/r/golang/comments/i1vy4s/ddd_vs_db_transactions_how_to_reconcile/
+pub mod in_memory;
 pub mod postgres;
 
 use anyhow::{bail, Result};
 use std::sync::{Arc, RwLock, RwLockWriteGuard};
 
-/// An instance of a persistence (store) that can hold data
-///
-/// Must be cloneable and thread-safe.
-pub trait Persistence: Send + Sync + Clone {
-    type Connection: Connection;
+use crate::{auction::ItemIdRef, service::bidding_engine::AuctionBiddingState};
 
-    /// Get a connection to a store
-    fn get_connection(&self) -> Result<Self::Connection>;
+#[derive(Clone)]
+pub struct Persistence(Arc<dyn PersistenceImpl>);
+pub struct Connection(Box<dyn ConnectionImpl>);
+pub struct Transaction<'a>(Box<dyn TransactionImpl<'a> + 'a>);
+
+impl Persistence {
+    pub fn get_connection(&self) -> Result<Connection> {
+        self.0.clone().get_connection()
+    }
 }
+impl Connection {
+    pub fn start_transaction(&mut self) -> Result<Transaction<'_>> {
+        self.0.start_transaction()
+    }
 
-/// A connection to a database/persistence
-pub trait Connection {
-    type Transaction<'a>: Transaction
-    where
-        Self: 'a;
-    fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>>;
+    pub fn load(&mut self, item_id: ItemIdRef) -> Result<Option<AuctionBiddingState>> {
+        let mut transaction = self.start_transaction()?;
+        transaction.load_tr(item_id)
+    }
+
+    pub fn store(&mut self, item_id: ItemIdRef, state: AuctionBiddingState) -> Result<()> {
+        let mut transaction = self.start_transaction()?;
+        transaction.store_tr(item_id, state)
+    }
 }
+impl<'a> Transaction<'a> {
+    pub fn commit(self) -> Result<()> {
+        self.0.commit()
+    }
+    pub fn rollback(self) -> Result<()> {
+        self.0.rollback()
+    }
+    pub fn load_tr(
+        &mut self,
+        item_id: crate::auction::ItemIdRef,
+    ) -> anyhow::Result<Option<AuctionBiddingState>> {
+        self.0.load_tr(item_id)
+    }
 
-/// A database transaction to a database/persistence
-pub trait Transaction {
-    fn commit(self) -> Result<()>;
-    fn rollback(self) -> Result<()>;
-}
-
-/// Fake in-memory persistence.
-///
-/// Useful for unit-tests.
-#[derive(Debug, Clone)]
-pub struct InMemoryPersistence {
-    lock: Arc<RwLock<()>>,
-}
-
-impl InMemoryPersistence {
-    pub fn new() -> Self {
-        Self {
-            lock: Arc::new(RwLock::new(())),
-        }
+    pub fn store_tr(
+        &mut self,
+        item_id: crate::auction::ItemIdRef,
+        state: AuctionBiddingState,
+    ) -> anyhow::Result<()> {
+        self.0.store_tr(item_id, state)
     }
 }
 
-impl Persistence for InMemoryPersistence {
-    type Connection = InMemoryConnection;
+pub trait PersistenceImpl: Send + Sync {
+    fn get_connection(self: Arc<Self>) -> Result<Connection>;
+}
+pub trait ConnectionImpl {
+    fn start_transaction<'a>(&'a mut self) -> Result<Transaction<'a>>;
+}
+pub trait TransactionImpl<'a> {
+    fn commit(self: Box<Self>) -> Result<()>;
+    fn rollback(self: Box<Self>) -> Result<()>;
+    fn load_tr(
+        &mut self,
+        item_id: crate::auction::ItemIdRef,
+    ) -> anyhow::Result<Option<AuctionBiddingState>>;
 
-    fn get_connection(&self) -> Result<Self::Connection> {
-        Ok(InMemoryConnection {
-            lock: self.lock.clone(),
-        })
-    }
+    fn store_tr(
+        &mut self,
+        _item_id: crate::auction::ItemIdRef,
+        _state: AuctionBiddingState,
+    ) -> anyhow::Result<()>;
 }
 
-#[derive(Default, Debug)]
-pub struct InMemoryConnection {
-    lock: Arc<RwLock<()>>,
-}
-
-impl Connection for InMemoryConnection {
-    type Transaction<'a> = InMemoryTransaction<'a>;
-
-    fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>> {
-        Ok(InMemoryTransaction {
-            lock_guard: self.lock.write().expect("lock to work"),
-        })
-    }
-}
-
-#[derive(Debug)]
-pub struct InMemoryTransaction<'a> {
-    lock_guard: RwLockWriteGuard<'a, ()>,
-}
-
-impl<'a> Transaction for InMemoryTransaction<'a> {
-    fn commit(self) -> Result<()> {
-        Ok(())
-    }
-
-    // TODO: simulating rollbacks in a general way is not trivial
-    // and it would require all the `InMemory*` stores implementations
-    // to register previous value when creating the transaction or
-    // something like this.
-    fn rollback(self) -> Result<()> {
-        bail!("Not supported")
-    }
-}

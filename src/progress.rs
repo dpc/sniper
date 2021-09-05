@@ -4,7 +4,7 @@ pub use self::in_memory::*;
 
 use crate::{
     event_log::Offset,
-    persistence,
+    persistence::{self, Connection, Transaction},
     service::{ServiceId, ServiceIdRef},
 };
 use anyhow::format_err;
@@ -14,25 +14,15 @@ use anyhow::Result;
 
 /// A persistent store to keep track of the last processed event
 pub trait ProgressTracker {
-    type Persistence: persistence::Persistence;
-    fn load(
-        &self,
-        conn: &mut <<Self as ProgressTracker>::Persistence as persistence::Persistence>::Connection,
-        id: ServiceIdRef,
-    ) -> Result<Option<Offset>>;
+    fn load(&self, conn: &mut Connection, id: ServiceIdRef) -> Result<Option<Offset>>;
 
     fn store_tr<'a>(
         &self,
-        conn: &mut <<<Self as ProgressTracker>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        conn: &mut Transaction<'a>,
         id: ServiceIdRef,
         offset: Offset,
     ) -> Result<()>;
-    fn load_tr<'a>(
-        &self,
-        conn: &mut <<<Self as ProgressTracker>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
-        id: ServiceIdRef,
-    ) -> Result<Option<Offset>>;
+    fn load_tr<'a>(&self, conn: &mut Transaction<'a>, id: ServiceIdRef) -> Result<Option<Offset>>;
 }
 
-pub type SharedProgressTracker<P> =
-    Arc<dyn ProgressTracker<Persistence = P> + Send + Sync + 'static>;
+pub type SharedProgressTracker = Arc<dyn ProgressTracker + Send + Sync + 'static>;
