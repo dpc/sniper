@@ -5,7 +5,7 @@
 use crate::{
     auction::{Amount, BidDetails, Bidder, ItemBid, ItemId, ItemIdRef},
     event_log,
-    persistence::{self, Connection},
+    persistence::{self, Connection, ErasedTransaction},
     service::{self, auction_house, ui},
 };
 use anyhow::Result;
@@ -48,6 +48,27 @@ pub trait BiddingStateStore {
         state: AuctionBiddingState,
     ) -> Result<()> {
         self.store_tr(&mut conn.start_transaction()?, item_id, state)
+    }
+}
+
+pub struct ErasedBiddingStateStore;
+
+impl ErasedBiddingStateStore {
+    fn load_tr<'a>(
+        &self,
+        conn: &mut dyn ErasedTransaction<'a>,
+        item_id: ItemIdRef,
+    ) -> Result<Option<AuctionBiddingState>> {
+        todo!();
+    }
+
+    fn store_tr<'a>(
+        &self,
+        conn: &mut dyn ErasedTransaction<'a>,
+        item_id: ItemIdRef,
+        state: AuctionBiddingState,
+    ) -> Result<()> {
+        todo!();
     }
 }
 

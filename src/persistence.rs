@@ -14,7 +14,10 @@ pub mod postgres;
 pub use self::{in_memory::*, postgres::*};
 
 use anyhow::{bail, Result};
-use std::sync::{Arc, RwLock, RwLockWriteGuard};
+use std::{
+    any::Any,
+    sync::{Arc, RwLock, RwLockWriteGuard},
+};
 
 /// An instance of a persistence (store) that can hold data
 ///
@@ -30,7 +33,9 @@ pub trait Persistence: Send + Sync + Clone {
 
 /// A connection to a database/persistence
 pub trait Connection {
-    type Transaction<'a>: Transaction<'a>;
+    type Transaction<'a>: Transaction<'a>
+    where
+        Self: 'a;
     fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>>;
 }
 
@@ -40,9 +45,16 @@ pub trait Transaction<'a> {
     fn rollback(self) -> Result<()>;
 }
 
-// pub struct DynPersistence();
-// pub struct DynPersistence(
-//     Arc<dyn Persistence<Connection = DynConnection, Transaction = DynTransaction>>,
-// );
-// pub struct DynConnection(Box<dyn Connection<DynPersistence>>);
-// pub struct DynTransaction(Box<dyn Transaction>);
+pub trait ErasedPersistence {
+    fn get_connection(&self) -> Result<Box<dyn ErasedConnection>>;
+}
+
+pub trait ErasedConnection {
+    fn start_transaction<'a>(&'a mut self) -> Result<Box<dyn ErasedTransaction<'a> + 'a>>;
+}
+
+pub trait ErasedTransaction<'a>: Any + 'a {
+    fn as_any(&mut self) -> &mut dyn Any;
+    fn commit(self) -> Result<()>;
+    fn rollback(self) -> Result<()>;
+}
