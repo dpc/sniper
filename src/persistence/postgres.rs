@@ -7,6 +7,7 @@ pub struct PostgresPersistence {
 
 impl Persistence for PostgresPersistence {
     type Connection = PostgresConnection;
+    type Transaction<'a> = PostgresTransaction<'a>;
 
     fn get_connection(&self) -> Result<Self::Connection> {
         Ok(self.pool.get()?)
@@ -17,10 +18,10 @@ pub type PostgresConnection = r2d2::PooledConnection<
     r2d2_postgres::PostgresConnectionManager<r2d2_postgres::postgres::NoTls>,
 >;
 
-impl Connection for PostgresConnection {
-    type Transaction<'a> = PostgresTransaction<'a>;
-
-    fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>> {
+impl Connection<PostgresPersistence> for PostgresConnection {
+    fn start_transaction<'a>(
+        &'a mut self,
+    ) -> Result<<PostgresPersistence as Persistence>::Transaction<'a>> {
         Ok(self.transaction()?)
     }
 }

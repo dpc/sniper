@@ -30,7 +30,7 @@ where
 
     fn handle_event<'a>(
         &mut self,
-        transaction: &mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        transaction: &mut <P as persistence::Persistence>::Transaction<'a>,
         event: event_log::EventDetails,
     ) -> Result<()>;
 }
@@ -120,7 +120,13 @@ where
         mut f: F,
     ) -> JoinHandle
     where
-        F: for <'a> FnMut(&mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>, event_log::EventDetails) -> Result<()> + Send + Sync + 'static,
+        F: for<'a> FnMut(
+                &mut <P as persistence::Persistence>::Transaction<'a>,
+                event_log::EventDetails,
+            ) -> Result<()>
+            + Send
+            + Sync
+            + 'static,
         P: persistence::Persistence + 'static,
     {
         let service_id = service_id.to_owned();

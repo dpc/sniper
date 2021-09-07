@@ -73,7 +73,7 @@ pub trait Reader {
 
     fn read_tr<'a>(
         &self,
-        conn: &mut <<<Self as Reader>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        conn: &mut <<Self as Reader>::Persistence as persistence::Persistence>::Transaction<'a>,
         offset: Offset,
         limit: usize,
         timeout: Option<Duration>,
@@ -91,7 +91,7 @@ pub trait Reader {
 
     fn read_one_tr<'a>(
         &self,
-        conn: &mut <<<Self as Reader>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        conn: &mut <<Self as Reader>::Persistence as persistence::Persistence>::Transaction<'a>,
         offset: Offset,
     ) -> Result<(Offset, Option<Event>)> {
         let (offset, v) = self.read_tr(conn, offset, 1, Some(Duration::from_millis(0)))?;
@@ -123,7 +123,7 @@ pub trait Writer {
 
     fn write_tr<'a>(
         &self,
-        conn: &mut <<<Self as Writer>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        conn: &mut <<Self as Writer>::Persistence as persistence::Persistence>::Transaction<'a>,
         events: &[EventDetails],
     ) -> Result<Offset>;
 }

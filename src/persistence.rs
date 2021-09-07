@@ -17,18 +17,16 @@ use std::sync::{Arc, RwLock, RwLockWriteGuard};
 ///
 /// Must be cloneable and thread-safe.
 pub trait Persistence: Send + Sync + Clone {
-    type Connection: Connection;
+    type Connection: Connection<Self>;
+    type Transaction<'a>: Transaction;
 
     /// Get a connection to a store
     fn get_connection(&self) -> Result<Self::Connection>;
 }
 
 /// A connection to a database/persistence
-pub trait Connection {
-    type Transaction<'a>: Transaction
-    where
-        Self: 'a;
-    fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>>;
+pub trait Connection<P: Persistence> {
+    fn start_transaction<'a>(&'a mut self) -> Result<P::Transaction<'a>>;
 }
 
 /// A database transaction to a database/persistence
@@ -55,6 +53,7 @@ impl InMemoryPersistence {
 
 impl Persistence for InMemoryPersistence {
     type Connection = InMemoryConnection;
+    type Transaction<'a> = InMemoryTransaction<'a>;
 
     fn get_connection(&self) -> Result<Self::Connection> {
         Ok(InMemoryConnection {
@@ -68,10 +67,10 @@ pub struct InMemoryConnection {
     lock: Arc<RwLock<()>>,
 }
 
-impl Connection for InMemoryConnection {
-    type Transaction<'a> = InMemoryTransaction<'a>;
-
-    fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>> {
+impl Connection<InMemoryPersistence> for InMemoryConnection {
+    fn start_transaction<'a>(
+        &'a mut self,
+    ) -> Result<<InMemoryPersistence as Persistence>::Transaction<'a>> {
         Ok(InMemoryTransaction {
             lock_guard: self.lock.write().expect("lock to work"),
         })

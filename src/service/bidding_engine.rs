@@ -22,13 +22,13 @@ pub trait BiddingStateStore {
     type Persistence: persistence::Persistence;
     fn load_tr<'a>(
         &self,
-        conn: &mut <<<Self as BiddingStateStore>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        conn: &mut <<Self as BiddingStateStore>::Persistence as persistence::Persistence>::Transaction<'a>,
         item_id: ItemIdRef,
     ) -> Result<Option<AuctionBiddingState>>;
 
     fn store_tr<'a>(
         &self,
-        conn: &mut <<<Self as BiddingStateStore>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        conn: &mut <<Self as BiddingStateStore>::Persistence as persistence::Persistence>::Transaction<'a>,
         item_id: ItemIdRef,
         state: AuctionBiddingState,
     ) -> Result<()>;
@@ -240,7 +240,7 @@ impl<P> BiddingEngine<P> {
     }
 
     fn handle_event_with<'a>(
-        transaction: &mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        transaction: &mut <P as persistence::Persistence>::Transaction<'a>,
         bidding_state_store: &SharedBiddingStateStore<P>,
         event_writer: &event_log::SharedWriter<P>,
         item_id: ItemId,
@@ -346,7 +346,7 @@ where
 {
     fn handle_event<'a>(
         &mut self,
-        transaction: &mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        transaction: &mut <P as persistence::Persistence>::Transaction<'a>,
         event: event_log::EventDetails,
     ) -> Result<()> {
         Ok(match event {

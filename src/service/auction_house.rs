@@ -54,7 +54,7 @@ where
 
     fn handle_event<'a>(
         &mut self,
-        _transaction: &mut <<P as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        _transaction: &mut <P as persistence::Persistence>::Transaction<'a>,
         event: event_log::EventDetails,
     ) -> Result<()> {
         match event {

@@ -23,13 +23,13 @@ pub trait ProgressTracker {
 
     fn store_tr<'a>(
         &self,
-        conn: &mut <<<Self as ProgressTracker>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        conn: &mut <<Self as ProgressTracker>::Persistence as persistence::Persistence>::Transaction<'a>,
         id: ServiceIdRef,
         offset: Offset,
     ) -> Result<()>;
     fn load_tr<'a>(
         &self,
-        conn: &mut <<<Self as ProgressTracker>::Persistence as persistence::Persistence>::Connection as persistence::Connection>::Transaction<'a>,
+        conn: &mut <<Self as ProgressTracker>::Persistence as persistence::Persistence>::Transaction<'a>,
         id: ServiceIdRef,
     ) -> Result<Option<Offset>>;
 }
