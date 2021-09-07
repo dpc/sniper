@@ -32,10 +32,9 @@ pub struct InMemoryConnection {
     lock: Arc<RwLock<()>>,
 }
 
-impl Connection<InMemoryPersistence> for InMemoryConnection {
-    fn start_transaction<'a>(
-        &'a mut self,
-    ) -> Result<<InMemoryPersistence as Persistence>::Transaction<'a>> {
+impl Connection for InMemoryConnection {
+    type Transaction<'a> = InMemoryTransaction<'a>;
+    fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>> {
         Ok(InMemoryTransaction {
             lock_guard: self.lock.write().expect("lock to work"),
         })
@@ -47,7 +46,7 @@ pub struct InMemoryTransaction<'a> {
     lock_guard: RwLockWriteGuard<'a, ()>,
 }
 
-impl<'a> Transaction for InMemoryTransaction<'a> {
+impl<'a> Transaction<'a> for InMemoryTransaction<'a> {
     fn commit(self) -> Result<()> {
         Ok(())
     }

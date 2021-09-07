@@ -18,17 +18,16 @@ pub type PostgresConnection = r2d2::PooledConnection<
     r2d2_postgres::PostgresConnectionManager<r2d2_postgres::postgres::NoTls>,
 >;
 
-impl Connection<PostgresPersistence> for PostgresConnection {
-    fn start_transaction<'a>(
-        &'a mut self,
-    ) -> Result<<PostgresPersistence as Persistence>::Transaction<'a>> {
+impl Connection for PostgresConnection {
+    type Transaction<'a> = PostgresTransaction<'a>;
+    fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>> {
         Ok(self.transaction()?)
     }
 }
 
 pub type PostgresTransaction<'a> = ::postgres::Transaction<'a>;
 
-impl<'a> Transaction for PostgresTransaction<'a> {
+impl<'a> Transaction<'a> for PostgresTransaction<'a> {
     fn commit(self) -> Result<()> {
         Ok((self as ::postgres::Transaction<'a>).commit()?)
     }

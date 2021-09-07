@@ -20,20 +20,29 @@ use std::sync::{Arc, RwLock, RwLockWriteGuard};
 ///
 /// Must be cloneable and thread-safe.
 pub trait Persistence: Send + Sync + Clone {
-    type Connection: Connection<Self>;
-    type Transaction<'a>: Transaction;
+    #[rustfmt::skip]
+    type Connection: for<'a> Connection<Transaction<'a> = Self::Transaction<'a>>;
+    type Transaction<'a>: Transaction<'a>;
 
     /// Get a connection to a store
     fn get_connection(&self) -> Result<Self::Connection>;
 }
 
 /// A connection to a database/persistence
-pub trait Connection<P: Persistence> {
-    fn start_transaction<'a>(&'a mut self) -> Result<P::Transaction<'a>>;
+pub trait Connection {
+    type Transaction<'a>: Transaction<'a>;
+    fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>>;
 }
 
 /// A database transaction to a database/persistence
-pub trait Transaction {
+pub trait Transaction<'a> {
     fn commit(self) -> Result<()>;
     fn rollback(self) -> Result<()>;
 }
+
+// pub struct DynPersistence();
+// pub struct DynPersistence(
+//     Arc<dyn Persistence<Connection = DynConnection, Transaction = DynTransaction>>,
+// );
+// pub struct DynConnection(Box<dyn Connection<DynPersistence>>);
+// pub struct DynTransaction(Box<dyn Transaction>);
