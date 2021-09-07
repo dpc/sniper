@@ -1,6 +1,6 @@
-# sniper
+# Auction Sniper
 
-Educational Rust implemenation of Auction Sniper from Growing Object-Oriented Software, Guided By Tests 
+Educational Rust not-OOP implemenation of Auction Sniper from "Growing Object-Oriented Software, Guided By Tests" book
 
 
 More about it in [Data-oriented, clean&hexagonal architecture software in Rust – through an example project](https://dpc.pw/data-oriented-cleanandhexagonal-architecture-software-in-rust-through-an-example)
