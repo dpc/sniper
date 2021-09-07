@@ -6,7 +6,7 @@ Educational Rust not-OOP implemenation of Auction Sniper from "Growing Object-Or
 More about it in [Data-oriented, clean&hexagonal architecture software in Rust – through an example project](https://dpc.pw/data-oriented-cleanandhexagonal-architecture-software-in-rust-through-an-example)
 blog post.
 
-* Features:
+Features:
 
 * Services (main application logical threads/actors) with graceful shutdown on demand or error
 * Simple Event-Log-based communication.
