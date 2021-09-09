@@ -8,30 +8,24 @@ use crate::{
 };
 use anyhow::Result;
 
-trait BiddingEngineTestExt<P>
-where
-    P: Persistence,
-{
+trait BiddingEngineTestExt {
     fn handle_max_bid_event(
         &mut self,
-        conn: &mut <P as Persistence>::Connection,
+        conn: &mut dyn Connection,
         id: ItemIdRef,
         price: Amount,
     ) -> Result<()>;
 }
 
-impl<P> BiddingEngineTestExt<P> for BiddingEngine<P>
-where
-    P: Persistence + 'static,
-{
+impl BiddingEngineTestExt for BiddingEngine {
     fn handle_max_bid_event<'a>(
         &mut self,
-        conn: &mut <P as Persistence>::Connection,
+        conn: &mut dyn Connection,
         id: ItemIdRef,
         price: Amount,
     ) -> Result<()> {
         self.handle_event(
-            &mut conn.start_transaction()?,
+            &mut *conn.start_transaction()?,
             event_log::EventDetails::Ui(service::ui::Event::MaxBidSet(auction::ItemBid {
                 item: id.to_owned(),
                 price,
@@ -51,9 +45,9 @@ fn sanity_check_sends_a_bid_when_asked_to_via_event_log() -> Result<()> {
     let mut bidding_engine =
         service::bidding_engine::BiddingEngine::new(bidding_state_store, event_writer);
 
-    bidding_engine.handle_max_bid_event(&mut conn, "foo", 100)?;
+    bidding_engine.handle_max_bid_event(&mut *conn, "foo", 100)?;
 
-    let res = event_reader.read_one(&mut conn, event_reader.get_start_offset()?)?;
+    let res = event_reader.read_one(&mut *conn, event_reader.get_start_offset()?)?;
 
     assert_eq!(
         res.clone().1.map(|e| e.details),
@@ -65,13 +59,13 @@ fn sanity_check_sends_a_bid_when_asked_to_via_event_log() -> Result<()> {
         )))
     );
 
-    let res = event_reader.read_one(&mut conn, res.0)?;
+    let res = event_reader.read_one(&mut *conn, res.0)?;
     assert_eq!(res.1.map(|e| e.details), None);
 
     // sending the same bid again makes no difference
-    bidding_engine.handle_max_bid_event(&mut conn, "foo", 100)?;
+    bidding_engine.handle_max_bid_event(&mut *conn, "foo", 100)?;
 
-    let res = event_reader.read_one(&mut conn, res.0)?;
+    let res = event_reader.read_one(&mut *conn, res.0)?;
     assert_eq!(res.1.map(|e| e.details), None);
     Ok(())
 }
@@ -89,7 +83,7 @@ fn sends_a_bid_when_asked_to() -> Result<()> {
             service::bidding_engine::BiddingEngine::new(bidding_state_store, event_writer);
     */
     assert_eq!(
-        BiddingEngine::<()>::handle_max_bid_event("foo".to_string(), None, 100)?,
+        BiddingEngine::handle_max_bid_event("foo".to_string(), None, 100)?,
         (
             Some(AuctionBiddingState {
                 max_bid: 100,

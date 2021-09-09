@@ -8,7 +8,6 @@ use crate::{
 use anyhow::Result;
 
 use super::*;
-use crate::persistence;
 
 mod xmpp;
 pub use self::xmpp::*;
@@ -44,17 +43,14 @@ impl AuctionHouseSender {
     }
 }
 
-impl<P> LogFollowerService<P> for AuctionHouseSender
-where
-    P: persistence::Persistence + 'static,
-{
+impl LogFollowerService for AuctionHouseSender {
     fn get_log_progress_id(&self) -> String {
         "auction-house-sender".to_owned()
     }
 
     fn handle_event<'a>(
         &mut self,
-        _transaction: &mut <P as persistence::Persistence>::Transaction<'a>,
+        _transaction: &mut dyn Transaction<'a>,
         event: event_log::EventDetails,
     ) -> Result<()> {
         match event {
@@ -71,19 +67,16 @@ where
     }
 }
 
-pub struct AuctionHouseReceiver<P> {
-    persistence: P,
-    even_writer: event_log::SharedWriter<P>,
+pub struct AuctionHouseReceiver {
+    persistence: SharedPersistence,
+    even_writer: event_log::SharedWriter,
     auction_house_client: SharedAuctionHouseClient,
 }
 
-impl<P> AuctionHouseReceiver<P>
-where
-    P: persistence::Persistence + 'static,
-{
+impl AuctionHouseReceiver {
     pub fn new(
-        persistence: P,
-        even_writer: event_log::SharedWriter<P>,
+        persistence: SharedPersistence,
+        even_writer: event_log::SharedWriter,
         auction_house_client: SharedAuctionHouseClient,
     ) -> Self {
         Self {
@@ -94,10 +87,7 @@ where
     }
 }
 
-impl<P> LoopService for AuctionHouseReceiver<P>
-where
-    P: persistence::Persistence + 'static,
-{
+impl LoopService for AuctionHouseReceiver {
     fn run_iteration<'a>(&mut self) -> Result<()> {
         // TODO: no atomicity offered by the auction_house_client interface
         if let Some(event) = self
@@ -106,7 +96,7 @@ where
         {
             let mut connection = self.persistence.get_connection()?;
             self.even_writer.write(
-                &mut connection,
+                &mut *connection,
                 &[event_log::EventDetails::AuctionHouse(event)],
             )?;
         }

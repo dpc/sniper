@@ -27,10 +27,9 @@ impl InMemoryLog {
 }
 
 impl Reader for InMemoryLog {
-    type Persistence = persistence::InMemoryPersistence;
     fn read_tr<'a>(
         &self,
-        _conn: &mut persistence::InMemoryTransaction,
+        _conn: &mut dyn Transaction,
         offset: Offset,
         limit: usize,
         timeout: Option<Duration>,
@@ -68,21 +67,12 @@ impl Reader for InMemoryLog {
 }
 
 impl Writer for InMemoryLog {
-    type Persistence = persistence::InMemoryPersistence;
-
-    fn write_tr<'a>(
-        &self,
-        _conn: &mut persistence::InMemoryTransaction,
-        events: &[EventDetails],
-    ) -> Result<Offset> {
+    fn write_tr<'a>(&self, _conn: &mut dyn Transaction, events: &[EventDetails]) -> Result<Offset> {
         self.write_events(events)
     }
 }
 
-pub fn new_in_memory_shared() -> (
-    SharedWriter<persistence::InMemoryPersistence>,
-    SharedReader<persistence::InMemoryPersistence>,
-) {
+pub fn new_in_memory_shared() -> (SharedWriter, SharedReader) {
     let log = Arc::new(InMemoryLog {
         inner: RwLock::new(Vec::new()),
         condvar: util::CondvarAny::default(),

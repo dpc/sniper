@@ -14,50 +14,18 @@ pub mod postgres;
 pub use self::{in_memory::*, postgres::*};
 
 use anyhow::{bail, Result};
-use std::{
-    any::Any,
-    sync::{Arc, RwLock, RwLockWriteGuard},
-};
+use std::sync::{Arc, RwLock, RwLockWriteGuard};
 
-/// An instance of a persistence (store) that can hold data
-///
-/// Must be cloneable and thread-safe.
-pub trait Persistence: Send + Sync + Clone {
-    #[rustfmt::skip]
-    type Connection: for<'a> Connection<Transaction<'a> = Self::Transaction<'a>>;
-    type Transaction<'a>: Transaction<'a>;
-
-    /// Get a connection to a store
-    fn get_connection(&self) -> Result<Self::Connection>;
+pub trait Persistence: Send + Sync {
+    fn get_connection(&self) -> Result<Box<dyn Connection>>;
 }
 
-/// A connection to a database/persistence
+pub type SharedPersistence = Arc<dyn Persistence>;
 pub trait Connection {
-    type Transaction<'a>: Transaction<'a>
-    where
-        Self: 'a;
-    fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>>;
+    fn start_transaction<'a>(&'a mut self) -> Result<Box<dyn Transaction<'a> + 'a>>;
 }
 
-/// A database transaction to a database/persistence
 pub trait Transaction<'a> {
-    fn commit(self) -> Result<()>;
-    fn rollback(self) -> Result<()>;
-}
-
-// struct DynPersistence(Box<dyn Persistence<Connection=DynConnection>);
-
-// struct DynConnection(Box<dyn Persistence>);
-pub trait ErasedPersistence {
-    fn get_connection(&self) -> Result<Box<dyn ErasedConnection>>;
-}
-
-pub trait ErasedConnection {
-    fn start_transaction<'a>(&'a mut self) -> Result<Box<dyn ErasedTransaction<'a> + 'a>>;
-}
-
-pub trait ErasedTransaction<'a> {
-    // fn as_any(&mut self) -> &mut dyn Any;
     fn commit(self) -> Result<()>;
     fn rollback(self) -> Result<()>;
 }

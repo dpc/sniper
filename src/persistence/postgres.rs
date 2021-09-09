@@ -6,16 +6,7 @@ pub struct PostgresPersistence {
 }
 
 impl Persistence for PostgresPersistence {
-    type Connection = PostgresConnection;
-    type Transaction<'a> = PostgresTransaction<'a>;
-
-    fn get_connection(&self) -> Result<Self::Connection> {
-        Ok(self.pool.get()?)
-    }
-}
-
-impl ErasedPersistence for PostgresPersistence {
-    fn get_connection(&self) -> Result<Box<dyn ErasedConnection>> {
+    fn get_connection(&self) -> Result<Box<dyn Connection>> {
         Ok(Box::new(self.pool.get()?))
     }
 }
@@ -25,14 +16,7 @@ pub type PostgresConnection = r2d2::PooledConnection<
 >;
 
 impl Connection for PostgresConnection {
-    type Transaction<'a> = PostgresTransaction<'a>;
-    fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>> {
-        Ok(self.transaction()?)
-    }
-}
-
-impl ErasedConnection for PostgresConnection {
-    fn start_transaction<'a>(&'a mut self) -> Result<Box<dyn ErasedTransaction<'a> + 'a>> {
+    fn start_transaction<'a>(&'a mut self) -> Result<Box<dyn Transaction<'a> + 'a>> {
         Ok(Box::new(self.transaction()?))
     }
 }
@@ -46,15 +30,5 @@ impl<'a> Transaction<'a> for PostgresTransaction<'a> {
 
     fn rollback(self) -> Result<()> {
         Ok((self as ::postgres::Transaction<'a>).rollback()?)
-    }
-}
-
-impl<'a> ErasedTransaction<'a> for PostgresTransaction<'a> {
-    fn commit(self) -> Result<()> {
-        <Self as Transaction>::commit(self)
-    }
-
-    fn rollback(self) -> Result<()> {
-        <Self as Transaction>::rollback(self)
     }
 }

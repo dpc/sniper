@@ -17,13 +17,10 @@ impl InMemoryPersistence {
 }
 
 impl Persistence for InMemoryPersistence {
-    type Connection = InMemoryConnection;
-    type Transaction<'a> = InMemoryTransaction<'a>;
-
-    fn get_connection(&self) -> Result<Self::Connection> {
-        Ok(InMemoryConnection {
+    fn get_connection(&self) -> Result<Box<dyn Connection>> {
+        Ok(Box::new(InMemoryConnection {
             lock: self.lock.clone(),
-        })
+        }))
     }
 }
 
@@ -33,11 +30,10 @@ pub struct InMemoryConnection {
 }
 
 impl Connection for InMemoryConnection {
-    type Transaction<'a> = InMemoryTransaction<'a>;
-    fn start_transaction<'a>(&'a mut self) -> Result<Self::Transaction<'a>> {
-        Ok(InMemoryTransaction {
+    fn start_transaction<'a>(&'a mut self) -> Result<Box<dyn Transaction<'a> + 'a>> {
+        Ok(Box::new(InMemoryTransaction {
             lock_guard: self.lock.write().expect("lock to work"),
-        })
+        }))
     }
 }
 

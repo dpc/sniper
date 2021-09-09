@@ -1,4 +1,4 @@
-use crate::persistence;
+use crate::persistence::Transaction;
 use anyhow::Result;
 use std::convert::TryFrom;
 
@@ -7,12 +7,10 @@ pub struct PostgresBiddingStateStore {
 }
 
 impl super::BiddingStateStore for PostgresBiddingStateStore {
-    type Persistence = persistence::postgres::PostgresPersistence;
-
     #[allow(unreachable_code)]
     fn load_tr(
         &self,
-        conn: &mut persistence::postgres::PostgresTransaction,
+        conn: &mut dyn Transaction,
         item_id: crate::auction::ItemIdRef,
     ) -> anyhow::Result<Option<super::AuctionBiddingState>> {
         Ok(
@@ -30,7 +28,7 @@ impl super::BiddingStateStore for PostgresBiddingStateStore {
 
     fn store_tr(
         &self,
-        _conn: &mut persistence::postgres::PostgresTransaction,
+        _conn: &mut dyn Transaction,
         _item_id: crate::auction::ItemIdRef,
         _state: super::AuctionBiddingState,
     ) -> anyhow::Result<()> {

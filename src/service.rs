@@ -3,8 +3,7 @@ pub mod bidding_engine;
 pub mod ui;
 
 use crate::{
-    persistence,
-    persistence::{Connection, Transaction},
+    persistence::{Persistence, SharedPersistence, Transaction},
     progress,
 };
 use anyhow::{format_err, Result};
@@ -22,15 +21,12 @@ pub type ServiceId = String;
 pub type ServiceIdRef<'a> = &'a str;
 
 /// A service that handles events on the log
-pub trait LogFollowerService<P>: Send + Sync
-where
-    P: persistence::Persistence + 'static,
-{
+pub trait LogFollowerService: Send + Sync {
     fn get_log_progress_id(&self) -> String;
 
     fn handle_event<'a>(
         &mut self,
-        transaction: &mut <P as persistence::Persistence>::Transaction<'a>,
+        transaction: &mut dyn Transaction<'a>,
         event: event_log::EventDetails,
     ) -> Result<()>;
 }
@@ -46,17 +42,17 @@ pub trait LoopService: Send + Sync {
 /// gracefully terminate them, and handle and top-level error of any
 /// of them by gracefully stopping everything else.
 #[derive(Clone)]
-pub struct ServiceControl<P> {
+pub struct ServiceControl {
     stop_all: Arc<AtomicBool>,
-    progress_store: progress::SharedProgressTracker<P>,
-    persistence: P,
+    progress_store: progress::SharedProgressTracker,
+    persistence: Arc<dyn Persistence>,
 }
 
-impl<P> ServiceControl<P>
-where
-    P: persistence::Persistence + 'static,
-{
-    pub fn new(persistence: P, progress_store: progress::SharedProgressTracker<P>) -> Self {
+impl ServiceControl {
+    pub fn new(
+        persistence: SharedPersistence,
+        progress_store: progress::SharedProgressTracker,
+    ) -> Self {
         Self {
             stop_all: Default::default(),
             progress_store,
@@ -70,8 +66,8 @@ where
 
     pub fn spawn_log_follower(
         &self,
-        mut service: impl LogFollowerService<P> + 'static,
-        event_reader: event_log::SharedReader<P>,
+        mut service: impl LogFollowerService + 'static,
+        event_reader: event_log::SharedReader,
     ) -> JoinHandle {
         self.spawn_event_loop(
             &service.get_log_progress_id(),
@@ -116,18 +112,14 @@ where
     fn spawn_event_loop<F>(
         &self,
         service_id: ServiceIdRef,
-        event_reader: event_log::SharedReader<P>,
+        event_reader: event_log::SharedReader,
         mut f: F,
     ) -> JoinHandle
     where
-        F: for<'a> FnMut(
-                &mut <P as persistence::Persistence>::Transaction<'a>,
-                event_log::EventDetails,
-            ) -> Result<()>
+        F: for<'a> FnMut(&mut dyn Transaction<'a>, event_log::EventDetails) -> Result<()>
             + Send
             + Sync
             + 'static,
-        P: persistence::Persistence + 'static,
     {
         let service_id = service_id.to_owned();
 
@@ -135,7 +127,7 @@ where
             match (|| {
                 let mut connection = self.persistence.get_connection()?;
                 Ok(
-                    if let Some(offset) = self.progress_store.load(&mut connection, &service_id)? {
+                    if let Some(offset) = self.progress_store.load(&mut *connection, &service_id)? {
                         offset
                     } else {
                         event_reader.get_start_offset()?
@@ -162,16 +154,16 @@ where
                 let mut transaction = connection.start_transaction()?;
 
                 let (new_offset, mut events) = event_reader.read_tr(
-                    &mut transaction,
+                    &mut *transaction,
                     progress.clone(),
                     1,
                     Some(std::time::Duration::from_secs(1)),
                 )?;
                 for event in events.drain(..) {
-                    f(&mut transaction, event.details)?;
+                    f(&mut *transaction, event.details)?;
 
                     progress = new_offset;
-                    progress_store.store_tr(&mut transaction, &service_id, new_offset)?;
+                    progress_store.store_tr(&mut *transaction, &service_id, new_offset)?;
                 }
                 transaction.commit()?;
                 Ok(())
