@@ -4,7 +4,7 @@ pub use self::in_memory::*;
 
 use crate::{
     event_log::Offset,
-    persistence::{ Connection, Transaction},
+    persistence::{Connection, Transaction},
     service::{ServiceId, ServiceIdRef},
 };
 use anyhow::format_err;

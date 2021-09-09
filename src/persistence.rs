@@ -12,20 +12,49 @@ pub mod in_memory;
 pub mod postgres;
 
 pub use self::{in_memory::*, postgres::*};
+use thiserror::Error;
 
 use anyhow::{bail, Result};
-use std::sync::{Arc, RwLock, RwLockWriteGuard};
+use std::{
+    any::Any,
+    sync::{Arc, RwLock, RwLockWriteGuard},
+};
 
 pub trait Persistence: Send + Sync {
     fn get_connection(&self) -> Result<Box<dyn Connection>>;
 }
 
 pub type SharedPersistence = Arc<dyn Persistence>;
-pub trait Connection {
+pub trait Connection: Any {
     fn start_transaction<'a>(&'a mut self) -> Result<Box<dyn Transaction<'a> + 'a>>;
+
+    fn cast<'b>(&'b mut self) -> Caster<'b>;
 }
 
 pub trait Transaction<'a> {
-    fn commit(self) -> Result<()>;
-    fn rollback(self) -> Result<()>;
+    fn commit(self: Box<Self>) -> Result<()>;
+    fn rollback(self: Box<Self>) -> Result<()>;
+
+    fn cast<'b>(&'b mut self) -> Caster<'b>
+    where
+        'a: 'b;
+}
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("wrong type")]
+    WrongType,
+}
+
+pub struct Caster<'a>(&'a mut dyn Any);
+
+impl<'a> Caster<'a> {
+    pub fn new(any: &'a mut dyn Any) -> Self {
+        Self(any)
+    }
+
+    // Returns `Result` so it's easier to handle with ? than an option
+    pub fn as_mut<T: 'static>(self) -> Result<&'a mut T, Error> {
+        self.0.downcast_mut::<T>().ok_or_else(|| Error::WrongType)
+    }
 }

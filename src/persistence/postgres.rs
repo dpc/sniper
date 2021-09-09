@@ -19,16 +19,32 @@ impl Connection for PostgresConnection {
     fn start_transaction<'a>(&'a mut self) -> Result<Box<dyn Transaction<'a> + 'a>> {
         Ok(Box::new(self.transaction()?))
     }
+
+    fn cast<'b>(&'b mut self) -> Caster<'b> {
+        Caster::new(self)
+    }
 }
 
 pub type PostgresTransaction<'a> = ::postgres::Transaction<'a>;
 
 impl<'a> Transaction<'a> for PostgresTransaction<'a> {
-    fn commit(self) -> Result<()> {
-        Ok((self as ::postgres::Transaction<'a>).commit()?)
+    fn commit(self: Box<Self>) -> Result<()> {
+        Ok((*self as ::postgres::Transaction<'a>).commit()?)
     }
 
-    fn rollback(self) -> Result<()> {
-        Ok((self as ::postgres::Transaction<'a>).rollback()?)
+    fn rollback(self: Box<Self>) -> Result<()> {
+        Ok((*self as ::postgres::Transaction<'a>).rollback()?)
+    }
+
+    fn cast<'b>(&'b mut self) -> Caster<'b>
+    where
+        'a: 'b,
+    {
+        Caster::new(unsafe {
+            std::mem::transmute::<
+                &'b mut PostgresTransaction<'a>,
+                &'b mut PostgresTransaction<'static>,
+            >(self) as &mut dyn Any
+        })
     }
 }

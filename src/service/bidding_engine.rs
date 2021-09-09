@@ -5,7 +5,7 @@
 use crate::{
     auction::{Amount, BidDetails, Bidder, ItemBid, ItemId, ItemIdRef},
     event_log,
-    persistence::{Connection, Transaction},
+    persistence::{Connection, InMemoryTransaction, Transaction},
     service::{self, auction_house, ui},
 };
 use anyhow::Result;
@@ -88,18 +88,20 @@ impl InMemoryBiddingStateStore {
 impl BiddingStateStore for InMemoryBiddingStateStore {
     fn load_tr<'a>(
         &self,
-        _conn: &mut dyn Transaction,
+        conn: &mut dyn Transaction,
         item_id: ItemIdRef,
     ) -> Result<Option<AuctionBiddingState>> {
+        conn.cast().as_mut::<InMemoryTransaction>()?;
         Ok(self.0.lock().expect("lock").get(item_id).cloned())
     }
 
     fn store_tr<'a>(
         &self,
-        _conn: &mut dyn Transaction,
+        conn: &mut dyn Transaction,
         item_id: ItemIdRef,
         state: AuctionBiddingState,
     ) -> Result<()> {
+        conn.cast().as_mut::<InMemoryTransaction>()?;
         self.0
             .lock()
             .expect("lock")

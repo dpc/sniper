@@ -10,8 +10,8 @@ mod persistence;
 mod progress;
 mod service;
 
-use std::sync::Arc;
 use anyhow::Result;
+use std::sync::Arc;
 
 fn main() -> Result<()> {
     let persistence = Arc::new(persistence::InMemoryPersistence::new());

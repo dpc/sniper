@@ -1,4 +1,5 @@
 use super::*;
+use crate::persistence::InMemoryTransaction;
 
 type InMemoryLogInner = Vec<EventDetails>;
 
@@ -67,7 +68,8 @@ impl Reader for InMemoryLog {
 }
 
 impl Writer for InMemoryLog {
-    fn write_tr<'a>(&self, _conn: &mut dyn Transaction, events: &[EventDetails]) -> Result<Offset> {
+    fn write_tr<'a>(&self, conn: &mut dyn Transaction, events: &[EventDetails]) -> Result<Offset> {
+        conn.cast().as_mut::<InMemoryTransaction>()?;
         self.write_events(events)
     }
 }
