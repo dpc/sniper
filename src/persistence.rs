@@ -45,6 +45,9 @@ pub trait Transaction<'a> {
     fn rollback(self) -> Result<()>;
 }
 
+// struct DynPersistence(Box<dyn Persistence<Connection=DynConnection>);
+
+// struct DynConnection(Box<dyn Persistence>);
 pub trait ErasedPersistence {
     fn get_connection(&self) -> Result<Box<dyn ErasedConnection>>;
 }
@@ -53,8 +56,8 @@ pub trait ErasedConnection {
     fn start_transaction<'a>(&'a mut self) -> Result<Box<dyn ErasedTransaction<'a> + 'a>>;
 }
 
-pub trait ErasedTransaction<'a>: Any + 'a {
-    fn as_any(&mut self) -> &mut dyn Any;
+pub trait ErasedTransaction<'a> {
+    // fn as_any(&mut self) -> &mut dyn Any;
     fn commit(self) -> Result<()>;
     fn rollback(self) -> Result<()>;
 }

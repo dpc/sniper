@@ -50,10 +50,6 @@ impl<'a> Transaction<'a> for PostgresTransaction<'a> {
 }
 
 impl<'a> ErasedTransaction<'a> for PostgresTransaction<'a> {
-    fn as_any(&mut self) -> &mut dyn Any {
-        self
-    }
-
     fn commit(self) -> Result<()> {
         <Self as Transaction>::commit(self)
     }
