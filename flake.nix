@@ -9,6 +9,7 @@
       url = "github:mozilla/nixpkgs-mozilla";
       flake = false;
     };
+
     flake-compat = {
       url = "github:edolstra/flake-compat";
       flake = false;
@@ -20,7 +21,7 @@
     #   inputs.nixpkgs.follows = "nixpkgs";
     # };
     naersk = {
-      url = "github:dpc/naersk";
+      url = "github:nix-community/naersk";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
