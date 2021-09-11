@@ -3,6 +3,8 @@ pub mod bidding_engine;
 pub mod ui;
 
 use crate::{
+    event::Event,
+    event_log,
     persistence::{Persistence, SharedPersistence, Transaction},
     progress,
 };
@@ -15,8 +17,6 @@ use std::{
     thread,
 };
 
-use crate::event_log;
-
 pub type ServiceId = String;
 pub type ServiceIdRef<'a> = &'a str;
 
@@ -27,7 +27,7 @@ pub trait LogFollowerService: Send + Sync {
     fn handle_event<'a>(
         &mut self,
         transaction: &mut dyn Transaction<'a>,
-        event: event_log::EventDetails,
+        event: Event,
     ) -> Result<()>;
 }
 
@@ -116,10 +116,7 @@ impl ServiceControl {
         mut f: F,
     ) -> JoinHandle
     where
-        F: for<'a> FnMut(&mut dyn Transaction<'a>, event_log::EventDetails) -> Result<()>
-            + Send
-            + Sync
-            + 'static,
+        F: for<'a> FnMut(&mut dyn Transaction<'a>, Event) -> Result<()> + Send + Sync + 'static,
     {
         let service_id = service_id.to_owned();
 

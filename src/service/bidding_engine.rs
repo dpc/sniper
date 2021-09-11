@@ -4,16 +4,16 @@
 //! determines if new bids should be created and of what amount.
 use crate::{
     auction::{Amount, BidDetails, Bidder, ItemBid, ItemId, ItemIdRef},
+    event::{AuctionHouseItemEvent, BiddingEngineAuctionError, BiddingEngineEvent, Event, UiEvent},
     event_log,
     persistence::{Connection, InMemoryTransaction, Transaction},
-    service::{self, auction_house, ui},
+    service,
 };
 use anyhow::Result;
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
 };
-use thiserror::Error;
 
 mod postgres;
 
@@ -47,27 +47,6 @@ pub trait BiddingStateStore {
         state: AuctionBiddingState,
     ) -> Result<()> {
         self.store_tr(&mut *conn.start_transaction()?, item_id, state)
-    }
-}
-
-pub struct ErasedBiddingStateStore;
-
-impl ErasedBiddingStateStore {
-    fn load_tr<'a>(
-        &self,
-        conn: &mut dyn Transaction<'a>,
-        item_id: ItemIdRef,
-    ) -> Result<Option<AuctionBiddingState>> {
-        todo!();
-    }
-
-    fn store_tr<'a>(
-        &self,
-        conn: &mut dyn Transaction<'a>,
-        item_id: ItemIdRef,
-        state: AuctionBiddingState,
-    ) -> Result<()> {
-        todo!();
     }
 }
 
@@ -110,30 +89,6 @@ impl BiddingStateStore for InMemoryBiddingStateStore {
     }
 }
 
-#[derive(Error, Debug, Copy, Clone, PartialEq, Eq)]
-pub enum UserError {
-    #[error("auction already closed")]
-    AlreadyClosed,
-    #[error("bid is too low")]
-    TooLow,
-}
-
-#[derive(Error, Clone, Debug, PartialEq, Eq)]
-pub enum AuctionError {
-    #[error("unknown auction: {0}")]
-    UnknownAuction(ItemId),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Event {
-    /// We are placing a bid
-    Bid(ItemBid),
-    /// Auction house event caused an error
-    AuctionError(AuctionError),
-    /// User event caused an error
-    UserError(UserError),
-}
-
 #[derive(Default, Copy, Clone, PartialEq, Eq, Debug)]
 pub struct AuctionState {
     pub higest_bid: Option<BidDetails>,
@@ -141,9 +96,9 @@ pub struct AuctionState {
 }
 
 impl AuctionState {
-    pub fn handle_auction_event(mut self, event: auction_house::EventDetails) -> Self {
+    pub fn handle_auction_event(mut self, event: AuctionHouseItemEvent) -> Self {
         match event {
-            auction_house::EventDetails::Bid(bid) => {
+            AuctionHouseItemEvent::Bid(bid) => {
                 if !self.closed
                     && self
                         .higest_bid
@@ -154,7 +109,7 @@ impl AuctionState {
                 }
                 self
             }
-            auction_house::EventDetails::Closed => {
+            AuctionHouseItemEvent::Closed => {
                 self.closed = true;
                 self
             }
@@ -227,17 +182,14 @@ pub struct AuctionBiddingState {
 }
 
 impl AuctionBiddingState {
-    pub fn handle_auction_house_event(self, event: auction_house::EventDetails) -> Self {
+    pub fn handle_auction_house_event(self, event: AuctionHouseItemEvent) -> Self {
         Self {
             max_bid: self.max_bid,
             state: self.state.handle_auction_event(event),
         }
     }
     pub fn handle_new_max_bid(self, max_bid: Amount) -> Self {
-        Self {
-            max_bid: max_bid,
-            ..self
-        }
+        Self { max_bid, ..self }
     }
 }
 
@@ -264,7 +216,9 @@ impl BiddingEngine {
         bidding_state_store: &SharedBiddingStateStore,
         event_writer: &event_log::SharedWriter,
         item_id: ItemId,
-        f: impl FnOnce(Option<AuctionBiddingState>) -> Result<(Option<AuctionBiddingState>, Vec<Event>)>,
+        f: impl FnOnce(
+            Option<AuctionBiddingState>,
+        ) -> Result<(Option<AuctionBiddingState>, Vec<BiddingEngineEvent>)>,
     ) -> Result<()> {
         let auction_state = bidding_state_store.load_tr(transaction, &item_id)?;
 
@@ -278,7 +232,7 @@ impl BiddingEngine {
             transaction,
             &events
                 .into_iter()
-                .map(|e| event_log::EventDetails::BiddingEngine(e))
+                .map(|e| Event::BiddingEngine(e))
                 .collect::<Vec<_>>(),
         )?;
 
@@ -288,8 +242,8 @@ impl BiddingEngine {
     pub fn handle_auction_house_event(
         item_id: ItemId,
         old_state: Option<AuctionBiddingState>,
-        event: crate::service::auction_house::EventDetails,
-    ) -> Result<(Option<AuctionBiddingState>, Vec<Event>)> {
+        event: AuctionHouseItemEvent,
+    ) -> Result<(Option<AuctionBiddingState>, Vec<BiddingEngineEvent>)> {
         Ok(if let Some(auction_state) = old_state {
             let new_state = auction_state.handle_auction_house_event(event);
 
@@ -300,7 +254,7 @@ impl BiddingEngine {
                         .state
                         .get_next_bid(new_state.max_bid)
                         .map(move |our_bid| {
-                            Event::Bid(ItemBid {
+                            BiddingEngineEvent::Bid(ItemBid {
                                 item: item_id,
                                 price: our_bid,
                             })
@@ -314,7 +268,9 @@ impl BiddingEngine {
         } else {
             (
                 None,
-                vec![Event::AuctionError(AuctionError::UnknownAuction(item_id))],
+                vec![BiddingEngineEvent::AuctionError(
+                    BiddingEngineAuctionError::UnknownAuction(item_id),
+                )],
             )
         })
     }
@@ -323,7 +279,7 @@ impl BiddingEngine {
         item_id: ItemId,
         old_state: Option<AuctionBiddingState>,
         price: Amount,
-    ) -> Result<(Option<AuctionBiddingState>, Vec<Event>)> {
+    ) -> Result<(Option<AuctionBiddingState>, Vec<BiddingEngineEvent>)> {
         let auction_state = old_state.unwrap_or_else(Default::default);
 
         let new_state = auction_state.handle_new_max_bid(price);
@@ -342,7 +298,7 @@ impl BiddingEngine {
                         .state
                         .get_next_bid(new_state.max_bid)
                         .map(move |our_bid| {
-                            Event::Bid(ItemBid {
+                            BiddingEngineEvent::Bid(ItemBid {
                                 item: item_id,
                                 price: our_bid,
                             })
@@ -361,17 +317,17 @@ impl service::LogFollowerService for BiddingEngine {
     fn handle_event<'a>(
         &mut self,
         transaction: &mut dyn Transaction<'a>,
-        event: event_log::EventDetails,
+        event: Event,
     ) -> Result<()> {
         Ok(match event {
-            event_log::EventDetails::AuctionHouse(event) => Self::handle_event_with(
+            Event::AuctionHouse(event) => Self::handle_event_with(
                 transaction,
                 &self.bidding_state_store,
                 &self.even_writer,
                 event.item.clone(),
                 |old_state| Self::handle_auction_house_event(event.item, old_state, event.event),
             )?,
-            event_log::EventDetails::Ui(ui::Event::MaxBidSet(item_bid)) => Self::handle_event_with(
+            Event::Ui(UiEvent::MaxBidSet(item_bid)) => Self::handle_event_with(
                 transaction,
                 &self.bidding_state_store,
                 &self.even_writer,

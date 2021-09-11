@@ -1,7 +1,7 @@
 use super::*;
-use crate::persistence::InMemoryTransaction;
+use crate::{event::Event, persistence::InMemoryTransaction};
 
-type InMemoryLogInner = Vec<EventDetails>;
+type InMemoryLogInner = Vec<Event>;
 
 pub struct InMemoryLog {
     inner: RwLock<InMemoryLogInner>,
@@ -17,7 +17,7 @@ impl InMemoryLog {
         self.inner.write()
     }
 
-    fn write_events(&self, events: &[EventDetails]) -> Result<Offset> {
+    fn write_events(&self, events: &[Event]) -> Result<Offset> {
         let mut write = self.write();
 
         write.extend_from_slice(events);
@@ -34,7 +34,7 @@ impl Reader for InMemoryLog {
         offset: Offset,
         limit: usize,
         timeout: Option<Duration>,
-    ) -> Result<(Offset, Vec<Event>)> {
+    ) -> Result<(Offset, Vec<LogEvent>)> {
         let offset_usize = usize::try_from(offset)?;
 
         let mut read = self.read();
@@ -53,7 +53,7 @@ impl Reader for InMemoryLog {
             .iter()
             .take(limit)
             .enumerate()
-            .map(|(i, e)| Event {
+            .map(|(i, e)| LogEvent {
                 offset: offset + u64::try_from(i).expect("no fail"),
                 details: e.clone(),
             })
@@ -68,7 +68,7 @@ impl Reader for InMemoryLog {
 }
 
 impl Writer for InMemoryLog {
-    fn write_tr<'a>(&self, conn: &mut dyn Transaction, events: &[EventDetails]) -> Result<Offset> {
+    fn write_tr<'a>(&self, conn: &mut dyn Transaction, events: &[Event]) -> Result<Offset> {
         conn.cast().as_mut::<InMemoryTransaction>()?;
         self.write_events(events)
     }

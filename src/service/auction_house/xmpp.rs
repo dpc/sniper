@@ -18,7 +18,7 @@ impl AuctionHouseClient for XmppAuctionHouseClient {
         todo!()
     }
 
-    fn poll(&self, timeout: Option<Duration>) -> Result<Option<Event>> {
+    fn poll(&self, timeout: Option<Duration>) -> Result<Option<AuctionHouseEvent>> {
         timeout.map(|t| std::thread::sleep(t));
         // TODO
         Ok(None)

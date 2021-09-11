@@ -1,8 +1,8 @@
 use std::{sync::Arc, time::Duration};
 
-use super::bidding_engine;
 use crate::{
-    auction::{Amount, BidDetails, ItemId, ItemIdRef},
+    auction::{Amount, ItemIdRef},
+    event::{AuctionHouseEvent, BiddingEngineEvent, Event},
     event_log,
 };
 use anyhow::Result;
@@ -12,21 +12,9 @@ use super::*;
 mod xmpp;
 pub use self::xmpp::*;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Event {
-    pub item: ItemId,
-    pub event: EventDetails,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum EventDetails {
-    Bid(BidDetails),
-    Closed,
-}
-
 pub trait AuctionHouseClient {
     fn place_bid(&self, item_id: ItemIdRef, price: Amount) -> Result<()>;
-    fn poll(&self, timeout: Option<Duration>) -> Result<Option<Event>>;
+    fn poll(&self, timeout: Option<Duration>) -> Result<Option<AuctionHouseEvent>>;
 }
 
 pub type SharedAuctionHouseClient = Arc<dyn AuctionHouseClient + Send + Sync + 'static>;
@@ -51,11 +39,11 @@ impl LogFollowerService for AuctionHouseSender {
     fn handle_event<'a>(
         &mut self,
         _transaction: &mut dyn Transaction<'a>,
-        event: event_log::EventDetails,
+        event: Event,
     ) -> Result<()> {
         match event {
-            event_log::EventDetails::BiddingEngine(event) => match event {
-                bidding_engine::Event::Bid(item_bid) => {
+            Event::BiddingEngine(event) => match event {
+                BiddingEngineEvent::Bid(item_bid) => {
                     // Note: we rely on idempotency of this call to the server here
                     self.auction_house_client
                         .place_bid(&item_bid.item, item_bid.price)
@@ -95,10 +83,8 @@ impl LoopService for AuctionHouseReceiver {
             .poll(Some(Duration::from_secs(1)))?
         {
             let mut connection = self.persistence.get_connection()?;
-            self.even_writer.write(
-                &mut *connection,
-                &[event_log::EventDetails::AuctionHouse(event)],
-            )?;
+            self.even_writer
+                .write(&mut *connection, &[Event::AuctionHouse(event)])?;
         }
 
         Ok(())

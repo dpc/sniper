@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use crate::{
-    event_log,
-    event_log::*,
+    event::*,
+    event_log::{self, LogEvent},
     persistence::{self, Persistence},
 };
 use anyhow::Result;
@@ -26,7 +26,7 @@ fn event_logs_sanity_check() -> Result<()> {
         (start_offset, vec![])
     );
 
-    let inserted_offset = event_writer.write(&mut *conn, &[event_log::EventDetails::Test])?;
+    let inserted_offset = event_writer.write(&mut *conn, &[Event::Test])?;
 
     assert_eq!(
         event_reader.read(
@@ -47,9 +47,9 @@ fn event_logs_sanity_check() -> Result<()> {
         )?,
         (
             inserted_offset,
-            vec![Event {
+            vec![LogEvent {
                 offset: event_reader.get_start_offset()?,
-                details: event_log::EventDetails::Test
+                details: Event::Test
             }]
         )
     );

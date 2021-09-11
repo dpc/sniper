@@ -5,6 +5,7 @@
 #![feature(map_first_last)]
 
 mod auction;
+mod event;
 mod event_log;
 mod persistence;
 mod progress;

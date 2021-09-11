@@ -1,4 +1,7 @@
-use crate::persistence::{Connection, Transaction};
+use crate::{
+    event::Event,
+    persistence::{Connection, Transaction},
+};
 use anyhow::{format_err, Result};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::{convert::TryFrom, sync::Arc, time::Duration};
@@ -42,28 +45,12 @@ mod util {
     }
 }
 
-use crate::service::{auction_house, bidding_engine, ui};
-
 pub type Offset = u64;
 
-// TODO: This type makes everything cyclical:
-// All services depend on it, and it depends
-// on events of each of the services. Not a
-// big deal for this small program, but something
-// to take care of in a more realistic implementation.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum EventDetails {
-    AuctionHouse(auction_house::Event),
-    BiddingEngine(bidding_engine::Event),
-    Ui(ui::Event),
-    #[cfg(test)]
-    Test,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Event {
+pub struct LogEvent {
     pub offset: Offset,
-    pub details: EventDetails,
+    pub details: Event,
 }
 
 pub trait Reader {
@@ -75,7 +62,7 @@ pub trait Reader {
         offset: Offset,
         limit: usize,
         timeout: Option<Duration>,
-    ) -> Result<(Offset, Vec<Event>)>;
+    ) -> Result<(Offset, Vec<LogEvent>)>;
 
     fn read<'a>(
         &self,
@@ -83,7 +70,7 @@ pub trait Reader {
         offset: Offset,
         limit: usize,
         timeout: Option<Duration>,
-    ) -> Result<(Offset, Vec<Event>)> {
+    ) -> Result<(Offset, Vec<LogEvent>)> {
         self.read_tr(&mut *conn.start_transaction()?, offset, limit, timeout)
     }
 
@@ -91,7 +78,7 @@ pub trait Reader {
         &self,
         conn: &mut dyn Transaction<'a>,
         offset: Offset,
-    ) -> Result<(Offset, Option<Event>)> {
+    ) -> Result<(Offset, Option<LogEvent>)> {
         let (offset, v) = self.read_tr(conn, offset, 1, Some(Duration::from_millis(0)))?;
         assert!(v.len() <= 1);
         Ok((offset, v.into_iter().next()))
@@ -101,7 +88,7 @@ pub trait Reader {
         &self,
         conn: &mut dyn Connection,
         offset: Offset,
-    ) -> Result<(Offset, Option<Event>)> {
+    ) -> Result<(Offset, Option<LogEvent>)> {
         let (offset, v) = self.read(conn, offset, 1, Some(Duration::from_millis(0)))?;
         assert!(v.len() <= 1);
         Ok((offset, v.into_iter().next()))
@@ -109,15 +96,11 @@ pub trait Reader {
 }
 
 pub trait Writer {
-    fn write(&self, conn: &mut dyn Connection, events: &[EventDetails]) -> Result<Offset> {
+    fn write(&self, conn: &mut dyn Connection, events: &[Event]) -> Result<Offset> {
         self.write_tr(&mut *conn.start_transaction()?, events)
     }
 
-    fn write_tr<'a>(
-        &self,
-        conn: &mut dyn Transaction<'a>,
-        events: &[EventDetails],
-    ) -> Result<Offset>;
+    fn write_tr<'a>(&self, conn: &mut dyn Transaction<'a>, events: &[Event]) -> Result<Offset>;
 }
 
 pub type SharedReader = Arc<dyn Reader + Sync + Send + 'static>;

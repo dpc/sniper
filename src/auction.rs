@@ -5,6 +5,7 @@ pub type Amount = u64;
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Bidder {
     Sniper,
+    #[allow(unused)]
     Other,
 }
 
