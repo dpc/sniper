@@ -15,10 +15,7 @@ pub use self::{in_memory::*, postgres::*};
 use thiserror::Error;
 
 use anyhow::{bail, Result};
-use std::{
-    any::Any,
-    sync::{Arc, RwLock, RwLockWriteGuard},
-};
+use std::{any::Any, sync::Arc};
 
 pub trait Persistence: Send + Sync {
     fn get_connection(&self) -> Result<Box<dyn Connection>>;

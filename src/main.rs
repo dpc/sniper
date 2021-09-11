@@ -45,6 +45,10 @@ fn main() -> Result<()> {
             service::auction_house::AuctionHouseSender::new(auction_house_client.clone()),
             event_reader.clone(),
         ),
+        svc_ctr.spawn_loop(service::ui::Ui::new(
+            persistence.clone(),
+            event_writer.clone(),
+        )?),
     ] {
         handle.join()?
     }

@@ -1,4 +1,5 @@
 use super::*;
+use parking_lot::{RwLock, RwLockWriteGuard};
 
 /// Fake in-memory persistence.
 ///
@@ -32,7 +33,7 @@ pub struct InMemoryConnection {
 impl Connection for InMemoryConnection {
     fn start_transaction<'a>(&'a mut self) -> Result<Box<dyn Transaction<'a> + 'a>> {
         Ok(Box::new(InMemoryTransaction {
-            lock_guard: self.lock.write().expect("lock to work"),
+            lock_guard: self.lock.write(),
         }))
     }
 

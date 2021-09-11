@@ -16,3 +16,7 @@ parking_lot = "*"
 postgres = "*"
 r2d2 = "*"
 r2d2_postgres = "*"
+
+axum = "*"
+tokio = { version="*", features=["rt", "rt-multi-thread"] }
+async-trait = "*"

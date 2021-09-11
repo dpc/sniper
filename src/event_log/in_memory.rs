@@ -1,6 +1,42 @@
 use super::*;
 use crate::{event::Event, persistence::InMemoryTransaction};
 
+mod util {
+    use parking_lot::{Condvar, Mutex, RwLockReadGuard};
+    use std::time::Duration;
+
+    #[derive(Default)]
+    // https://github.com/Amanieu/parking_lot/issues/165#issuecomment-515991706
+    pub struct CondvarAny {
+        c: Condvar,
+        m: Mutex<()>,
+    }
+
+    impl CondvarAny {
+        pub fn wait<T>(&self, g: &mut RwLockReadGuard<'_, T>) {
+            let guard = self.m.lock();
+            RwLockReadGuard::unlocked(g, || {
+                // Move the guard in so it gets unlocked before we re-lock g
+                let mut guard = guard;
+                self.c.wait(&mut guard);
+            });
+        }
+
+        pub fn wait_for<T>(&self, g: &mut RwLockReadGuard<'_, T>, timeout: Duration) {
+            let guard = self.m.lock();
+            RwLockReadGuard::unlocked(g, || {
+                // Move the guard in so it gets unlocked before we re-lock g
+                let mut guard = guard;
+                self.c.wait_for(&mut guard, timeout);
+            });
+        }
+
+        pub fn notify_all(&self) -> usize {
+            self.c.notify_all()
+        }
+    }
+}
+
 type InMemoryLogInner = Vec<Event>;
 
 pub struct InMemoryLog {
