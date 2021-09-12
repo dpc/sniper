@@ -1,5 +1,5 @@
 {
-  description = "A very basic flake";
+  description = "Auction Sniper in Rust";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs";
@@ -25,10 +25,9 @@
     flake-utils.lib.eachDefaultSystem (system:
     let
       pkgs = nixpkgs.legacyPackages."${system}";
-      fenix-rust = { inherit (fenix.packages.${system}.minimal) cargo rustc; };
+      fenix-channel = fenix.packages.${system}.minimal;
       naersk-lib = naersk.lib."${system}".override {
-        cargo = fenix-rust.cargo;
-        rustc = fenix-rust.rustc;
+        inherit (fenix.packages.${system}.minimal) cargo rustc;
       };
     in rec {
       packages.sniper = naersk-lib.buildPackage ./.;
@@ -44,10 +43,10 @@
           nativeBuildInputs = (with pkgs;
             [
               pkgconfig
-              fenix-rust.rust-analyzer
-              fenix-rust.rustc
+              fenix-channel.rust-analyzer
+              fenix-channel.rustc
             ]);
-          RUST_SRC_PATH = "${fenix-rust.rust-src}/lib/rustlib/src/rust/library";
+          RUST_SRC_PATH = "${fenix-channel.rust-src}/lib/rustlib/src/rust/library";
         };
   });
 }
