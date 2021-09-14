@@ -21,6 +21,17 @@ async fn run_http_server(
     .route("/bid/", post( {
         let even_writer = even_writer.clone();
         let persistence = persistence.clone(); || async move {
+            // OK, so here's the deal; mixing sync & async
+            // code is a PITA and I don't want to convert
+            // the whole project into async, at least ATM.
+            // For mixing, one could define new set of traits
+            // with async methods, and that works OKish,
+            // though I've hit a problem of not being able
+            // to share a [tokio::sync::Mutex] between
+            // sync & async code in [crate::persistence::InMemoryPersistence].
+            //
+            // Using `spawn_blocking` is lazy and should work, so I
+            // leave it at that.
             tokio::task::spawn_blocking(move || {
                 even_writer.write(
                     &mut *persistence.get_connection().unwrap(), // TODO
