@@ -25,9 +25,10 @@
     flake-utils.lib.eachDefaultSystem (system:
     let
       pkgs = nixpkgs.legacyPackages."${system}";
-      fenix-channel = fenix.packages.${system}.minimal;
+      fenix-pkgs = fenix.packages.${system};
+      fenix-channel = fenix-pkgs.complete;
       naersk-lib = naersk.lib."${system}".override {
-        inherit (fenix.packages.${system}.minimal) cargo rustc;
+        inherit (fenix-pkgs.minimal) cargo rustc;
       };
     in rec {
       packages.sniper = naersk-lib.buildPackage ./.;
@@ -43,10 +44,10 @@
           nativeBuildInputs = (with pkgs;
             [
               pkgconfig
-              fenix-channel.rust-analyzer
+              fenix-pkgs.rust-analyzer
               fenix-channel.rustc
             ]);
-          RUST_SRC_PATH = "${fenix-channel.rust-src}/lib/rustlib/src/rust/library";
+          RUST_SRC_PATH = "${fenix-channel.rustc}/lib/rustlib/src/rust/library";
         };
   });
 }
