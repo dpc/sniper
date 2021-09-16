@@ -1,49 +1,57 @@
-use crate::{event_log, persistence::SharedPersistence, service::LoopService};
+use crate::{
+    auction::ItemBid, event, event_log, persistence::SharedPersistence, service::LoopService,
+};
 use anyhow::{format_err, Context, Result};
-use axum::{handler::{get, post}, Router};
+use axum::{
+    handler::{get, post},
+    Router,
+};
 use tokio::{runtime::Runtime, sync::oneshot};
-use crate::event;
-use crate::auction::{ItemBid};
 
 pub struct Ui {
-
     // cancels all tasks on read
     _runtime: Runtime,
     server_rx: oneshot::Receiver<Result<()>>,
 }
 
 async fn run_http_server(
-        persistence: SharedPersistence,
-        even_writer: event_log::SharedWriter,
-    ) -> Result<()> {
+    persistence: SharedPersistence,
+    even_writer: event_log::SharedWriter,
+) -> Result<()> {
     // build our application with a single route
-    let app = Router::new().route("/", get(|| async { "Hello, World!" }))
-    .route("/bid/", post( {
-        let even_writer = even_writer.clone();
-        let persistence = persistence.clone(); || async move {
-            // OK, so here's the deal; mixing sync & async
-            // code is a PITA and I don't want to convert
-            // the whole project into async, at least ATM.
-            // For mixing, one could define new set of traits
-            // with async methods, and that works OKish,
-            // though I've hit a problem of not being able
-            // to share a [tokio::sync::Mutex] between
-            // sync & async code in [crate::persistence::InMemoryPersistence].
-            //
-            // Using `spawn_blocking` is lazy and should work, so I
-            // leave it at that.
-            tokio::task::spawn_blocking(move || {
-                even_writer.write(
-                    &mut *persistence.get_connection().unwrap(), // TODO
-                    &[event::Event::Ui(event::UiEvent::MaxBidSet(ItemBid {
-                    item: "tbd".to_string(),
-                    price: 1,
-                }))]
-                );
-            }
-    ).await.unwrap() // TODO;
-
-    }}));
+    let app = Router::new()
+        .route("/", get(|| async { "Hello, World!" }))
+        .route(
+            "/bid/",
+            post({
+                let even_writer = even_writer.clone();
+                let persistence = persistence.clone();
+                || async move {
+                    // OK, so here's the deal; mixing sync & async
+                    // code is a PITA and I don't want to convert
+                    // the whole project into async, at least ATM.
+                    // For mixing, one could define new set of traits
+                    // with async methods, and that works OKish,
+                    // though I've hit a problem of not being able
+                    // to share a [tokio::sync::Mutex] between
+                    // sync & async code in [crate::persistence::InMemoryPersistence].
+                    //
+                    // Using `spawn_blocking` is lazy and should work, so I
+                    // leave it at that.
+                    tokio::task::spawn_blocking(move || {
+                        even_writer.write(
+                            &mut *persistence.get_connection().unwrap(), // TODO
+                            &[event::Event::Ui(event::UiEvent::MaxBidSet(ItemBid {
+                                item: "tbd".to_string(),
+                                price: 1,
+                            }))],
+                        );
+                    })
+                    .await
+                    .unwrap() // TODO;
+                }
+            }),
+        );
 
     // run it with hyper on localhost:3000
     axum::Server::try_bind(&"0.0.0.0:3000".parse()?)?

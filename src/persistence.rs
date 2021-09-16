@@ -23,7 +23,7 @@ pub trait Persistence: Send + Sync {
 
 pub type SharedPersistence = Arc<dyn Persistence>;
 pub trait Connection: Any {
-    fn start_transaction<'a>(&'a mut self) -> Result<Box<dyn Transaction<'a> + 'a>>;
+    fn start_transaction<'a>(&'a mut self) -> Result<OwnedTransaction<'a>>;
 
     fn cast<'b>(&'b mut self) -> Caster<'b>;
 }
@@ -36,6 +36,8 @@ pub trait Transaction<'a> {
     where
         'a: 'b;
 }
+
+pub type OwnedTransaction<'a> = Box<dyn Transaction<'a> + 'a>;
 
 #[derive(Error, Debug)]
 pub enum Error {

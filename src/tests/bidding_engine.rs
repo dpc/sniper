@@ -40,7 +40,7 @@ fn sanity_check_sends_a_bid_when_asked_to_via_event_log() -> Result<()> {
     let persistence = persistence::InMemoryPersistence::new();
     let mut conn = persistence.get_connection()?;
 
-    let (event_writer, event_reader) = event_log::new_in_memory_shared();
+    let (event_writer, event_reader) = event_log::new_in_memory_shared()?;
     let bidding_state_store = service::bidding_engine::InMemoryBiddingStateStore::new_shared();
 
     let mut bidding_engine =
@@ -51,21 +51,21 @@ fn sanity_check_sends_a_bid_when_asked_to_via_event_log() -> Result<()> {
     let res = event_reader.read_one(&mut *conn, event_reader.get_start_offset()?)?;
 
     assert_eq!(
-        res.clone().1.map(|e| e.details),
+        res.data.clone().map(|e| e.details),
         Some(Event::BiddingEngine(BiddingEngineEvent::Bid(ItemBid {
             item: "foo".to_owned(),
             price: 0
         })))
     );
 
-    let res = event_reader.read_one(&mut *conn, res.0)?;
-    assert_eq!(res.1.map(|e| e.details), None);
+    let res = event_reader.read_one(&mut *conn, res.offset)?;
+    assert_eq!(res.data.map(|e| e.details), None);
 
     // sending the same bid again makes no difference
     bidding_engine.handle_max_bid_event(&mut *conn, "foo", 100)?;
 
-    let res = event_reader.read_one(&mut *conn, res.0)?;
-    assert_eq!(res.1.map(|e| e.details), None);
+    let res = event_reader.read_one(&mut *conn, res.offset)?;
+    assert_eq!(res.data.map(|e| e.details), None);
     Ok(())
 }
 

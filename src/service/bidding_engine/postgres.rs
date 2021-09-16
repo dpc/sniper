@@ -1,4 +1,6 @@
-use crate::persistence::{postgres::PostgresTransaction, Connection, Transaction, PostgresConnection};
+use crate::persistence::{
+    postgres::PostgresTransaction, Connection, PostgresConnection, Transaction,
+};
 use anyhow::Result;
 use std::convert::TryFrom;
 

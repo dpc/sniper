@@ -1,18 +1,20 @@
 use super::*;
-use parking_lot::{RwLock, RwLockWriteGuard};
+use futures;
+use tokio::sync::{Mutex, MutexGuard};
+use tracing::debug;
 
 /// Fake in-memory persistence.
 ///
 /// Useful for unit-tests.
 #[derive(Debug, Clone)]
 pub struct InMemoryPersistence {
-    lock: Arc<RwLock<()>>,
+    lock: Arc<Mutex<()>>,
 }
 
 impl InMemoryPersistence {
     pub fn new() -> Self {
         Self {
-            lock: Arc::new(RwLock::new(())),
+            lock: Arc::new(Mutex::new(())),
         }
     }
 }
@@ -27,13 +29,14 @@ impl Persistence for InMemoryPersistence {
 
 #[derive(Default, Debug)]
 pub struct InMemoryConnection {
-    lock: Arc<RwLock<()>>,
+    lock: Arc<Mutex<()>>,
 }
 
 impl Connection for InMemoryConnection {
-    fn start_transaction<'a>(&'a mut self) -> Result<Box<dyn Transaction<'a> + 'a>> {
+    fn start_transaction<'a>(&'a mut self) -> Result<OwnedTransaction<'a>> {
+        debug!("starting transaction");
         Ok(Box::new(InMemoryTransaction {
-            lock_guard: self.lock.write(),
+            lock_guard: futures::executor::block_on(self.lock.lock()),
         }))
     }
 
@@ -44,7 +47,13 @@ impl Connection for InMemoryConnection {
 
 #[derive(Debug)]
 pub struct InMemoryTransaction<'a> {
-    lock_guard: RwLockWriteGuard<'a, ()>,
+    lock_guard: MutexGuard<'a, ()>,
+}
+
+impl<'a> Drop for InMemoryTransaction<'a> {
+    fn drop(&mut self) {
+        debug!("finished in memory transaction");
+    }
 }
 
 impl<'a> Transaction<'a> for InMemoryTransaction<'a> {

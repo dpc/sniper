@@ -45,9 +45,10 @@
             [
               pkgconfig
               fenix-pkgs.rust-analyzer
+              fenix-channel.rustfmt
               fenix-channel.rustc
             ]);
-          RUST_SRC_PATH = "${fenix-channel.rustc}/lib/rustlib/src/rust/library";
+          RUST_SRC_PATH = "${fenix-channel.rust-src}/lib/rustlib/src/rust/library";
         };
   });
 }

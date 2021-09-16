@@ -1,4 +1,5 @@
 use super::*;
+use tracing::debug;
 
 #[derive(Clone, Debug)]
 pub struct XmppAuctionHouseClient;
@@ -14,7 +15,8 @@ impl XmppAuctionHouseClient {
 }
 
 impl AuctionHouseClient for XmppAuctionHouseClient {
-    fn place_bid(&self, _item_id: ItemIdRef, _price: Amount) -> Result<()> {
+    fn place_bid(&self, item_id: ItemIdRef, price: Amount) -> Result<()> {
+        debug!(?item_id, ?price, "sending bid");
         todo!()
     }
 

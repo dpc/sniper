@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::{
     event::*,
-    event_log::{self, LogEvent},
+    event_log::{self, LogEvent, WithOffset},
     persistence::{self, Persistence},
 };
 use anyhow::Result;
@@ -10,7 +10,7 @@ use anyhow::Result;
 #[test]
 fn event_logs_sanity_check() -> Result<()> {
     let persistence = persistence::InMemoryPersistence::new();
-    let (event_writer, event_reader) = event_log::new_in_memory_shared();
+    let (event_writer, event_reader) = event_log::new_in_memory_shared()?;
 
     let start_offset = event_reader.get_start_offset()?;
 
@@ -18,12 +18,18 @@ fn event_logs_sanity_check() -> Result<()> {
 
     assert_eq!(
         event_reader.read(&mut *conn, start_offset, 0, Some(Duration::from_secs(0)))?,
-        (start_offset, vec![])
+        WithOffset {
+            offset: start_offset,
+            data: vec![]
+        }
     );
 
     assert_eq!(
         event_reader.read(&mut *conn, start_offset, 1, Some(Duration::from_secs(0)))?,
-        (start_offset, vec![])
+        WithOffset {
+            offset: start_offset,
+            data: vec![]
+        }
     );
 
     let inserted_offset = event_writer.write(&mut *conn, &[Event::Test])?;
@@ -35,7 +41,10 @@ fn event_logs_sanity_check() -> Result<()> {
             1,
             Some(Duration::from_secs(0))
         )?,
-        (inserted_offset, vec![])
+        WithOffset {
+            offset: inserted_offset,
+            data: vec![]
+        }
     );
 
     assert_eq!(
@@ -45,13 +54,13 @@ fn event_logs_sanity_check() -> Result<()> {
             1,
             Some(Duration::from_secs(0))
         )?,
-        (
-            inserted_offset,
-            vec![LogEvent {
+        WithOffset {
+            offset: inserted_offset,
+            data: vec![LogEvent {
                 offset: event_reader.get_start_offset()?,
                 details: Event::Test
             }]
-        )
+        }
     );
 
     Ok(())

@@ -5,6 +5,7 @@ use crate::{
     event::{AuctionHouseEvent, BiddingEngineEvent, Event},
     event_log,
 };
+use tracing::debug;
 use anyhow::Result;
 
 use super::*;
@@ -41,6 +42,7 @@ impl LogFollowerService for AuctionHouseSender {
         _transaction: &mut dyn Transaction<'a>,
         event: Event,
     ) -> Result<()> {
+        debug!(?event, "event");
         match event {
             Event::BiddingEngine(event) => match event {
                 BiddingEngineEvent::Bid(item_bid) => {

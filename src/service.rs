@@ -2,13 +2,14 @@ pub mod auction_house;
 pub mod bidding_engine;
 pub mod ui;
 
+pub use self::{auction_house::*, bidding_engine::*, ui::*};
 use crate::{
     event::Event,
-    event_log,
+    event_log::{self, WithOffset},
     persistence::{Persistence, SharedPersistence, Transaction},
     progress,
 };
-use anyhow::{format_err, Result};
+use anyhow::{bail, format_err, Result};
 use std::{
     sync::{
         atomic::{self, AtomicBool, Ordering},
@@ -16,6 +17,7 @@ use std::{
     },
     thread,
 };
+use tracing::debug;
 
 pub type ServiceId = String;
 pub type ServiceIdRef<'a> = &'a str;
@@ -94,7 +96,7 @@ impl ServiceControl {
             stop.clone(),
             thread::spawn({
                 let stop_all = self.stop_all.clone();
-                move || {
+                move || match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     while !stop.load(atomic::Ordering::SeqCst)
                         && !stop_all.load(atomic::Ordering::SeqCst)
                     {
@@ -104,6 +106,12 @@ impl ServiceControl {
                         }
                     }
                     Ok(())
+                })) {
+                    Err(_e) => {
+                        stop_all.store(true, atomic::Ordering::SeqCst);
+                        bail!("service panicked");
+                    }
+                    Ok(res) => res,
                 }
             }),
         )
@@ -148,19 +156,28 @@ impl ServiceControl {
             let persistence = self.persistence.clone();
             move || {
                 let mut connection = persistence.get_connection()?;
-                let mut transaction = connection.start_transaction()?;
 
-                let (new_offset, mut events) = event_reader.read_tr(
-                    &mut *transaction,
+                let WithOffset {
+                    offset: new_offset,
+                    data: mut events,
+                } = event_reader.read(
+                    &mut *connection,
                     progress.clone(),
                     1,
                     Some(std::time::Duration::from_secs(1)),
                 )?;
+
+                let mut transaction = connection.start_transaction()?;
+
                 for event in events.drain(..) {
+                    debug!("f start");
                     f(&mut *transaction, event.details)?;
+                    debug!("f finished");
 
                     progress = new_offset;
+                    debug!("progress start");
                     progress_store.store_tr(&mut *transaction, &service_id, new_offset)?;
+                    debug!("progress finished");
                 }
                 transaction.commit()?;
                 Ok(())

@@ -14,6 +14,7 @@ use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
 };
+use tracing::debug;
 
 mod postgres;
 
@@ -220,6 +221,7 @@ impl BiddingEngine {
             Option<AuctionBiddingState>,
         ) -> Result<(Option<AuctionBiddingState>, Vec<BiddingEngineEvent>)>,
     ) -> Result<()> {
+        debug!("load auction state");
         let auction_state = bidding_state_store.load_tr(transaction, &item_id)?;
 
         let (new_state, events) = f(auction_state)?;
@@ -228,6 +230,7 @@ impl BiddingEngine {
             bidding_state_store.store_tr(transaction, &item_id, new_state)?;
         }
 
+        debug!("write event");
         event_writer.write_tr(
             transaction,
             &events
@@ -319,6 +322,7 @@ impl service::LogFollowerService for BiddingEngine {
         transaction: &mut dyn Transaction<'a>,
         event: Event,
     ) -> Result<()> {
+        debug!(?event, "event");
         Ok(match event {
             Event::AuctionHouse(event) => Self::handle_event_with(
                 transaction,
