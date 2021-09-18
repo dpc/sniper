@@ -17,7 +17,6 @@ use std::{
     },
     thread,
 };
-use tracing::debug;
 
 pub type ServiceId = String;
 pub type ServiceIdRef<'a> = &'a str;
@@ -170,14 +169,10 @@ impl ServiceControl {
                 let mut transaction = connection.start_transaction()?;
 
                 for event in events.drain(..) {
-                    debug!("f start");
                     f(&mut *transaction, event.details)?;
-                    debug!("f finished");
 
                     progress = new_offset;
-                    debug!("progress start");
                     progress_store.store_tr(&mut *transaction, &service_id, new_offset)?;
-                    debug!("progress finished");
                 }
                 transaction.commit()?;
                 Ok(())

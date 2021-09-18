@@ -1,7 +1,6 @@
 use super::*;
 use futures;
 use tokio::sync::{Mutex, MutexGuard};
-use tracing::debug;
 
 /// Fake in-memory persistence.
 ///
@@ -34,7 +33,6 @@ pub struct InMemoryConnection {
 
 impl Connection for InMemoryConnection {
     fn start_transaction<'a>(&'a mut self) -> Result<OwnedTransaction<'a>> {
-        debug!("starting transaction");
         Ok(Box::new(InMemoryTransaction {
             lock_guard: futures::executor::block_on(self.lock.lock()),
         }))
@@ -48,12 +46,6 @@ impl Connection for InMemoryConnection {
 #[derive(Debug)]
 pub struct InMemoryTransaction<'a> {
     lock_guard: MutexGuard<'a, ()>,
-}
-
-impl<'a> Drop for InMemoryTransaction<'a> {
-    fn drop(&mut self) {
-        debug!("finished in memory transaction");
-    }
 }
 
 impl<'a> Transaction<'a> for InMemoryTransaction<'a> {

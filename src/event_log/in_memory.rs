@@ -3,7 +3,6 @@ use crate::{event::Event, persistence::InMemoryTransaction};
 use async_condvar_fair::Condvar;
 use futures::FutureExt;
 use tokio::sync::{OwnedRwLockReadGuard, OwnedRwLockWriteGuard, RwLock};
-use tracing::debug;
 
 type InMemoryLogInner = Vec<Event>;
 
@@ -24,10 +23,8 @@ impl InMemoryLog {
 
     async fn write_events(&self, events: &[Event]) -> Result<Offset> {
         let mut write = self.write().await;
-        debug!("got write lock");
 
         write.extend_from_slice(events);
-        debug!("notify all");
         self.condvar.notify_all();
 
         Ok(u64::try_from(write.len())?)
@@ -46,15 +43,12 @@ impl Reader for InMemoryLog {
         let condvar = self.condvar.clone();
 
         let read = self.runtime.block_on(async {
-            debug!("getting read lock");
             let read = self.read().await;
-            debug!("got read lock");
 
             if read.len() == offset_usize {
                 if let Some(timeout) = timeout {
                     let timeout_fut = async move {
                         tokio::time::sleep(timeout).await;
-                        debug!("timeout, notify all");
                         condvar.notify_all();
                     }
                     .fuse();
@@ -102,7 +96,6 @@ impl Reader for InMemoryLog {
 impl Writer for InMemoryLog {
     fn write_tr<'a>(&self, conn: &mut dyn Transaction, events: &[Event]) -> Result<Offset> {
         conn.cast().as_mut::<InMemoryTransaction>()?;
-        debug!("write events");
         futures::executor::block_on(self.write_events(events))
     }
 }
