@@ -17,16 +17,24 @@ use thiserror::Error;
 use anyhow::{bail, Result};
 use std::{any::Any, sync::Arc};
 
+/// An interface of any persistence
+///
+/// Persistence is anything that a Repository implementation could
+/// use to store data.
 pub trait Persistence: Send + Sync {
-    fn get_connection(&self) -> Result<Box<dyn Connection>>;
+    /// Get a connection to persistence
+    fn get_connection(&self) -> Result<OwnedConnection>;
 }
 
 pub type SharedPersistence = Arc<dyn Persistence>;
+
 pub trait Connection: Any {
     fn start_transaction<'a>(&'a mut self) -> Result<OwnedTransaction<'a>>;
 
     fn cast<'b>(&'b mut self) -> Caster<'b>;
 }
+
+pub type OwnedConnection = Box<dyn Connection>;
 
 pub trait Transaction<'a> {
     fn commit(self: Box<Self>) -> Result<()>;
@@ -45,6 +53,11 @@ pub enum Error {
     WrongType,
 }
 
+/// Dynamic cast helper
+///
+/// This struct allows an implementation of a Repository
+/// to cast at runtime a type-erased [`Transaction`] or [`Connection`]
+/// instance to back to a concrete type that it needs and expects.
 pub struct Caster<'a>(&'a mut dyn Any);
 
 impl<'a> Caster<'a> {

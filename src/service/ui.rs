@@ -1,17 +1,27 @@
 use crate::{
-    auction::ItemBid, event, event_log, persistence::SharedPersistence, service::LoopService,
+    auction::{Amount, ItemBid},
+    event, event_log,
+    persistence::SharedPersistence,
+    service::LoopService,
 };
 use anyhow::{format_err, Context, Result};
 use axum::{
     handler::{get, post},
-    Router,
+    Json, Router,
 };
+use serde::Deserialize;
 use tokio::{runtime::Runtime, sync::oneshot};
 
 pub struct Ui {
-    // cancels all tasks on read
+    // cancels all tasks on drop
     _runtime: Runtime,
     server_rx: oneshot::Receiver<Result<()>>,
+}
+
+#[derive(Deserialize)]
+struct BidRequest {
+    item: String,
+    price: Amount,
 }
 
 async fn run_http_server(
@@ -26,7 +36,7 @@ async fn run_http_server(
             post({
                 let even_writer = even_writer.clone();
                 let persistence = persistence.clone();
-                || async move {
+                |Json(bid_request): Json<BidRequest>| async move {
                     // OK, so here's the deal; mixing sync & async
                     // code is a PITA and I don't want to convert
                     // the whole project into async, at least ATM.
@@ -40,15 +50,16 @@ async fn run_http_server(
                     // leave it at that.
                     tokio::task::spawn_blocking(move || {
                         even_writer.write(
-                            &mut *persistence.get_connection().unwrap(), // TODO
+                            &mut *persistence.get_connection()?,
                             &[event::Event::Ui(event::UiEvent::MaxBidSet(ItemBid {
-                                item: "tbd".to_string(),
-                                price: 1,
+                                item: bid_request.item,
+                                price: bid_request.price,
                             }))],
-                        );
+                        )
                     })
                     .await
-                    .unwrap() // TODO;
+                    .unwrap()
+                    .unwrap(); // TODO: convert to some nice http errors etc.
                 }
             }),
         );
@@ -95,7 +106,7 @@ impl LoopService for Ui {
             Ok(res) => res,
             Err(oneshot::error::TryRecvError::Empty) => Ok(()),
             Err(oneshot::error::TryRecvError::Closed) => {
-                Err(format_err!("ui server died with leaving a response?!"))
+                Err(format_err!("ui server died without leaving a response?!"))
             }
         }
     }

@@ -61,10 +61,13 @@ impl ServiceControl {
         }
     }
 
-    pub fn stop_all(&self) {
+    // Notify all spawned service instances to shutdown
+    pub fn send_stop_to_all(&self) {
         self.stop_all.store(true, Ordering::SeqCst);
     }
 
+    /// Spawn a service instance that implements a [`LogFollowerService`]
+    /// to track log events from `event_reader`.
     pub fn spawn_log_follower(
         &self,
         mut service: impl LogFollowerService + 'static,

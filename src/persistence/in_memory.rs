@@ -45,6 +45,7 @@ impl Connection for InMemoryConnection {
 
 #[derive(Debug)]
 pub struct InMemoryTransaction<'a> {
+    #[allow(unused)] // used only by Drop
     lock_guard: MutexGuard<'a, ()>,
 }
 

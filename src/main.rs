@@ -15,12 +15,11 @@ use anyhow::Result;
 use std::sync::Arc;
 
 fn main() -> Result<()> {
-
     tracing_subscriber::fmt::init();
 
     let persistence = Arc::new(persistence::InMemoryPersistence::new());
-    let (event_writer, event_reader) = event_log::new_in_memory_shared()?;
     let progress_store = progress::InMemoryProgressTracker::new_shared();
+    let (event_writer, event_reader) = event_log::new_in_memory_shared()?;
     let auction_house_client = service::auction_house::XmppAuctionHouseClient::new_shared();
 
     let svc_ctr = service::ServiceControl::new(persistence.clone(), progress_store);
@@ -29,7 +28,7 @@ fn main() -> Result<()> {
         let svc_ctr = svc_ctr.clone();
         move || {
             eprintln!("Stopping all services...");
-            svc_ctr.stop_all();
+            svc_ctr.send_stop_to_all();
         }
     })?;
 
@@ -48,10 +47,7 @@ fn main() -> Result<()> {
             service::AuctionHouseSender::new(auction_house_client.clone()),
             event_reader.clone(),
         ),
-        svc_ctr.spawn_loop(service::Ui::new(
-            persistence.clone(),
-            event_writer.clone(),
-        )?),
+        svc_ctr.spawn_loop(service::Ui::new(persistence.clone(), event_writer.clone())?),
     ] {
         handle.join()?
     }
