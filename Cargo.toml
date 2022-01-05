@@ -15,7 +15,7 @@ postgres = "*"
 r2d2 = "*"
 r2d2_postgres = "*"
 
-axum = "*"
+axum = "0.4"
 tokio = { version="1.11", features=["rt", "rt-multi-thread"] }
 async-trait = "*"
 futures = { version = "*", features = [ "async-await" ] }

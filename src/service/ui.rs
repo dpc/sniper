@@ -6,7 +6,9 @@ use crate::{
 };
 use anyhow::{format_err, Context, Result};
 use axum::{
-    handler::{get, post},
+    error_handling::HandleError,
+    http::StatusCode,
+    routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
@@ -24,6 +26,35 @@ struct BidRequest {
     price: Amount,
 }
 
+async fn handle_bid_request(
+    persistence: SharedPersistence,
+    even_writer: event_log::SharedWriter,
+    bid_request: BidRequest,
+) -> Result<()> {
+    // OK, so here's the deal; mixing sync & async
+    // code is a PITA and I don't want to convert
+    // the whole project into async, at least ATM.
+    // For mixing, one could define new set of traits
+    // with async methods, and that works OKish,
+    // though I've hit a problem of not being able
+    // to share a [tokio::sync::Mutex] between
+    // sync & async code in [crate::persistence::InMemoryPersistence].
+    //
+    // Using `spawn_blocking` is lazy and should work, so I
+    // leave it at that.
+    tokio::task::spawn_blocking(move || {
+        even_writer.write(
+            &mut *persistence.get_connection()?,
+            &[event::Event::Ui(event::UiEvent::MaxBidSet(ItemBid {
+                item: bid_request.item,
+                price: bid_request.price,
+            }))],
+        )
+    })
+    .await??;
+    Ok(())
+}
+
 async fn run_http_server(
     persistence: SharedPersistence,
     even_writer: event_log::SharedWriter,
@@ -36,30 +67,12 @@ async fn run_http_server(
             post({
                 let even_writer = even_writer.clone();
                 let persistence = persistence.clone();
+
                 |Json(bid_request): Json<BidRequest>| async move {
-                    // OK, so here's the deal; mixing sync & async
-                    // code is a PITA and I don't want to convert
-                    // the whole project into async, at least ATM.
-                    // For mixing, one could define new set of traits
-                    // with async methods, and that works OKish,
-                    // though I've hit a problem of not being able
-                    // to share a [tokio::sync::Mutex] between
-                    // sync & async code in [crate::persistence::InMemoryPersistence].
-                    //
-                    // Using `spawn_blocking` is lazy and should work, so I
-                    // leave it at that.
-                    tokio::task::spawn_blocking(move || {
-                        even_writer.write(
-                            &mut *persistence.get_connection()?,
-                            &[event::Event::Ui(event::UiEvent::MaxBidSet(ItemBid {
-                                item: bid_request.item,
-                                price: bid_request.price,
-                            }))],
-                        )
-                    })
-                    .await
-                    .unwrap()
-                    .unwrap(); // TODO: convert to some nice http errors etc.
+                    match handle_bid_request(persistence, even_writer, bid_request).await {
+                        Ok(()) => (StatusCode::OK, "".into()),
+                        Err(e) => handle_anyhow_error(e).await,
+                    }
                 }
             }),
         );
@@ -70,6 +83,13 @@ async fn run_http_server(
         .await?;
 
     Ok(())
+}
+
+async fn handle_anyhow_error(err: anyhow::Error) -> (StatusCode, String) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        format!("Something went wrong: {}", err),
+    )
 }
 
 impl Ui {
