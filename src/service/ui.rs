@@ -6,7 +6,6 @@ use crate::{
 };
 use anyhow::{format_err, Context, Result};
 use axum::{
-    error_handling::HandleError,
     http::StatusCode,
     routing::{get, post},
     Json, Router,

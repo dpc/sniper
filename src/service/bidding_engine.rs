@@ -90,6 +90,9 @@ impl BiddingStateStore for InMemoryBiddingStateStore {
     }
 }
 
+/// Bidding state from a perspective of the auction house
+///
+/// Constructed from the events delivered from the (remote) Auction House.
 #[derive(Default, Copy, Clone, PartialEq, Eq, Debug)]
 pub struct AuctionState {
     pub higest_bid: Option<BidDetails>,
@@ -150,7 +153,7 @@ impl AuctionState {
     }
     */
 
-    fn get_next_bid(self, max_price: Amount) -> Option<Amount> {
+    fn get_next_valid_bid(self, max_price: Amount) -> Option<Amount> {
         if self.closed {
             return None;
         }
@@ -178,19 +181,21 @@ impl AuctionState {
 
 #[derive(Copy, Clone, Default, PartialEq, Debug)]
 pub struct AuctionBiddingState {
-    pub max_bid: Amount,
-    pub state: AuctionState,
+    pub max_bid_limit: Amount,
+    pub last_bid_sent: Option<Amount>,
+    pub auction_state: AuctionState,
 }
 
 impl AuctionBiddingState {
+    pub fn is_bid_worth_sending(self, amount: Amount) -> bool {
+        self.last_bid_sent.is_none() || self.last_bid_sent.unwrap_or(0) < amount
+    }
+
     pub fn handle_auction_house_event(self, event: AuctionHouseItemEvent) -> Self {
         Self {
-            max_bid: self.max_bid,
-            state: self.state.handle_auction_event(event),
+            auction_state: self.auction_state.handle_auction_event(event),
+            ..self
         }
-    }
-    pub fn handle_new_max_bid(self, max_bid: Amount) -> Self {
-        Self { max_bid, ..self }
     }
 }
 
@@ -253,8 +258,8 @@ impl BiddingEngine {
                 (
                     Some(new_state),
                     new_state
-                        .state
-                        .get_next_bid(new_state.max_bid)
+                        .auction_state
+                        .get_next_valid_bid(new_state.max_bid_limit)
                         .map(move |our_bid| {
                             BiddingEngineEvent::Bid(ItemBid {
                                 item: item_id,
@@ -282,36 +287,33 @@ impl BiddingEngine {
         old_state: Option<AuctionBiddingState>,
         price: Amount,
     ) -> Result<(Option<AuctionBiddingState>, Vec<BiddingEngineEvent>)> {
-        let auction_state = old_state.unwrap_or_else(Default::default);
+        let old_state = old_state.unwrap_or_else(Default::default);
 
-        let new_state = auction_state.handle_new_max_bid(price);
+        let mut new_state = AuctionBiddingState {
+            max_bid_limit: price,
+            ..old_state
+        };
 
-        Ok(
-            if new_state != auction_state
-                && new_state
-                    .state
-                    .higest_bid
-                    .map(|bid| bid.bidder != Bidder::Sniper)
-                    .unwrap_or(true)
-            {
-                (
+        if let Some(our_new_bid) = new_state
+            .auction_state
+            .get_next_valid_bid(new_state.max_bid_limit)
+        {
+            if new_state.is_bid_worth_sending(our_new_bid) {
+                new_state.last_bid_sent = Some(our_new_bid);
+
+                Ok((
                     Some(new_state),
-                    new_state
-                        .state
-                        .get_next_bid(new_state.max_bid)
-                        .map(move |our_bid| {
-                            BiddingEngineEvent::Bid(ItemBid {
-                                item: item_id,
-                                price: our_bid,
-                            })
-                        })
-                        .into_iter()
-                        .collect(),
-                )
+                    vec![BiddingEngineEvent::Bid(ItemBid {
+                        item: item_id,
+                        price: our_new_bid,
+                    })],
+                ))
             } else {
-                (None, vec![])
-            },
-        )
+                Ok((None, vec![]))
+            }
+        } else {
+            Ok((None, vec![]))
+        }
     }
 }
 

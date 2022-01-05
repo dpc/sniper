@@ -85,13 +85,10 @@ fn sends_a_bid_when_asked_to() -> Result<()> {
         BiddingEngine::handle_max_bid_event("foo".to_string(), None, 100)?,
         (
             Some(AuctionBiddingState {
-                max_bid: 100,
-                state: AuctionState {
-                    higest_bid: Some(BidDetails {
-                        bidder: Bidder::Sniper,
-                        price: 0,
-                        increment: 0,
-                    }),
+                max_bid_limit: 100,
+                last_bid_sent: Some(0),
+                auction_state: AuctionState {
+                    higest_bid: None,
                     closed: false
                 },
             }),
