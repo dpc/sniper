@@ -65,13 +65,30 @@ impl<'caster> Caster<'caster> {
         Self(any)
     }
 
-    pub unsafe fn new_transmute<'a, Tb: 'a, Tstatic: 'static>(t: &'caster mut Tb) -> Self
+    /// Create a caster by transmutting `T<'a>` into a `T<'static>`
+    ///
+    /// The whole `transmute` sheningans are only required because `Any` requires
+    /// `'static`, while we have some `T<'a>` that we need to store as temporarily
+    /// cast to `Any` and cast back to `T<'b>` where `'a: 'b`. `
+    ///
+    /// The reason `Any` requires `'static` is that downcasting things in the presence
+    /// of non-static lifetimes is non-trivial, and no one ever researched and/or implemented
+    /// it.
+    ///
+    /// # Safety
+    ///
+    /// The safety is enforced by the fact that `Caster` pinky-promises to never
+    /// allow any reference other that `&'caster mut T` out of itself, and
+    /// `'a` must always outlive `'caster` or borrowck will be upset.
+    ///
+    /// The reason that this function is unsafe is that `Ta` and `Tstatic` must be the
+    /// same type, only with different lifetimes, and there seem to be no way to enforce
+    /// it.
+    pub unsafe fn new_transmute<'a, Ta: 'a, Tstatic: 'static>(t: &'caster mut Ta) -> Self
     where
         'a: 'caster,
     {
-        Self(
-            std::mem::transmute::<&'caster mut Tb, &'caster mut Tstatic>(t) as &mut dyn Any
-       )
+        Self(std::mem::transmute::<&'caster mut Ta, &'caster mut Tstatic>(t) as &mut dyn Any)
     }
 
     // Returns `Result` so it's easier to handle with ? than an option
