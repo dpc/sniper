@@ -34,7 +34,7 @@ pub struct InMemoryConnection {
 impl Connection for InMemoryConnection {
     fn start_transaction<'a>(&'a mut self) -> Result<OwnedTransaction<'a>> {
         Ok(Box::new(InMemoryTransaction {
-            lock_guard: futures::executor::block_on(self.lock.lock()),
+            _lock_guard: futures::executor::block_on(self.lock.lock()),
         }))
     }
 
@@ -45,8 +45,7 @@ impl Connection for InMemoryConnection {
 
 #[derive(Debug)]
 pub struct InMemoryTransaction<'a> {
-    #[allow(unused)] // used only by Drop
-    lock_guard: MutexGuard<'a, ()>,
+    _lock_guard: MutexGuard<'a, ()>,
 }
 
 impl<'a> Transaction<'a> for InMemoryTransaction<'a> {
@@ -62,15 +61,12 @@ impl<'a> Transaction<'a> for InMemoryTransaction<'a> {
         bail!("Not supported")
     }
 
-    fn cast<'b>(&'b mut self) -> Caster<'b>
+    fn cast<'caster>(&'caster mut self) -> Caster<'caster>
     where
-        'a: 'b,
+        'a: 'caster,
     {
-        Caster::new(unsafe {
-            std::mem::transmute::<
-                &'b mut InMemoryTransaction<'a>,
-                &'b mut InMemoryTransaction<'static>,
-            >(self) as &mut dyn Any
-        })
+        unsafe {
+            Caster::new_transmute::<'a, InMemoryTransaction<'a>, InMemoryTransaction<'static>>(self)
+        }
     }
 }

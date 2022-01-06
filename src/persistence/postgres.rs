@@ -36,15 +36,12 @@ impl<'a> Transaction<'a> for PostgresTransaction<'a> {
         Ok((*self as ::postgres::Transaction<'a>).rollback()?)
     }
 
-    fn cast<'b>(&'b mut self) -> Caster<'b>
+    fn cast<'caster>(&'caster mut self) -> Caster<'caster>
     where
-        'a: 'b,
+        'a: 'caster,
     {
-        Caster::new(unsafe {
-            std::mem::transmute::<
-                &'b mut PostgresTransaction<'a>,
-                &'b mut PostgresTransaction<'static>,
-            >(self) as &mut dyn Any
-        })
+        unsafe {
+            Caster::new_transmute::<'a, PostgresTransaction<'a>, PostgresTransaction<'static>>(self)
+        }
     }
 }

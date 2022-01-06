@@ -58,15 +58,24 @@ pub enum Error {
 /// This struct allows an implementation of a Repository
 /// to cast at runtime a type-erased [`Transaction`] or [`Connection`]
 /// instance to back to a concrete type that it needs and expects.
-pub struct Caster<'a>(&'a mut dyn Any);
+pub struct Caster<'caster>(&'caster mut dyn Any);
 
-impl<'a> Caster<'a> {
-    pub fn new(any: &'a mut dyn Any) -> Self {
+impl<'caster> Caster<'caster> {
+    pub fn new(any: &'caster mut dyn Any) -> Self {
         Self(any)
     }
 
+    pub unsafe fn new_transmute<'a, Tb: 'a, Tstatic: 'static>(t: &'caster mut Tb) -> Self
+    where
+        'a: 'caster,
+    {
+        Self(
+            std::mem::transmute::<&'caster mut Tb, &'caster mut Tstatic>(t) as &mut dyn Any
+       )
+    }
+
     // Returns `Result` so it's easier to handle with ? than an option
-    pub fn as_mut<T: 'static>(self) -> Result<&'a mut T, Error> {
+    pub fn as_mut<T: 'static>(self) -> Result<&'caster mut T, Error> {
         self.0.downcast_mut::<T>().ok_or_else(|| Error::WrongType)
     }
 }
