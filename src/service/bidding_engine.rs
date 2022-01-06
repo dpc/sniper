@@ -169,7 +169,7 @@ impl AuctionState {
             }) => None,
             Some(highest_bid) => {
                 let outbid_price = highest_bid.next_valid_bid();
-                if outbid_price <= max_price {
+                if dbg!(outbid_price) <= dbg!(max_price) {
                     Some(outbid_price)
                 } else {
                     None
@@ -187,7 +187,7 @@ pub struct AuctionBiddingState {
 }
 
 impl AuctionBiddingState {
-    pub fn is_bid_worth_sending(self, amount: Amount) -> bool {
+    pub fn is_bid_better_than_last_bid_sent(self, amount: Amount) -> bool {
         self.last_bid_sent.is_none() || self.last_bid_sent.unwrap_or(0) < amount
     }
 
@@ -203,39 +203,44 @@ pub const BIDDING_ENGINE_SERVICE_ID: &'static str = "bidding-engine";
 
 pub struct BiddingEngine {
     bidding_state_store: SharedBiddingStateStore,
-    even_writer: event_log::SharedWriter,
+    event_writer: event_log::SharedWriter,
 }
 
 impl BiddingEngine {
     pub fn new(
         bidding_state_store: SharedBiddingStateStore,
-        even_writer: event_log::SharedWriter,
+        event_writer: event_log::SharedWriter,
     ) -> Self {
         Self {
             bidding_state_store,
-            even_writer,
+            event_writer,
         }
     }
 
-    fn handle_event_with<'a>(
+    fn handle_auction_item_event_with<'a, T>(
+        &self,
         transaction: &mut dyn Transaction<'a>,
-        bidding_state_store: &SharedBiddingStateStore,
-        event_writer: &event_log::SharedWriter,
-        item_id: ItemId,
+        item_id: ItemIdRef,
+        data: T,
         f: impl FnOnce(
+            ItemIdRef,
             Option<AuctionBiddingState>,
+            T,
         ) -> Result<(Option<AuctionBiddingState>, Vec<BiddingEngineEvent>)>,
     ) -> Result<()> {
-        let auction_state = bidding_state_store.load_tr(transaction, &item_id)?;
+        let old_auction_state = self.bidding_state_store.load_tr(transaction, &item_id)?;
 
-        let (new_state, events) = f(auction_state)?;
+        let (new_auction_state, events) = f(item_id, old_auction_state, data)?;
 
-        if let Some(new_state) = new_state {
-            bidding_state_store.store_tr(transaction, &item_id, new_state)?;
+        if let Some(new_state) = new_auction_state {
+            if Some(new_state) != old_auction_state {
+                self.bidding_state_store
+                    .store_tr(transaction, item_id, new_state)?;
+            }
         }
 
         debug!(?events, "write events");
-        event_writer.write_tr(
+        self.event_writer.write_tr(
             transaction,
             &events
                 .into_iter()
@@ -247,72 +252,64 @@ impl BiddingEngine {
     }
 
     pub fn handle_auction_house_event(
-        item_id: ItemId,
+        item_id: ItemIdRef,
         old_state: Option<AuctionBiddingState>,
         event: AuctionHouseItemEvent,
     ) -> Result<(Option<AuctionBiddingState>, Vec<BiddingEngineEvent>)> {
-        Ok(if let Some(auction_state) = old_state {
-            let new_state = auction_state.handle_auction_house_event(event);
-
-            if new_state != auction_state {
-                (
-                    Some(new_state),
-                    new_state
-                        .auction_state
-                        .get_next_valid_bid(new_state.max_bid_limit)
-                        .map(move |our_bid| {
-                            BiddingEngineEvent::Bid(ItemBid {
-                                item: item_id,
-                                price: our_bid,
-                            })
-                        })
-                        .into_iter()
-                        .collect(),
-                )
-            } else {
-                (None, vec![])
-            }
+        if let Some(auction_state) = old_state {
+            Self::handle_next_bid_decision_for_new_state(
+                item_id,
+                auction_state.handle_auction_house_event(event),
+            )
         } else {
-            (
+            Ok((
                 None,
                 vec![BiddingEngineEvent::AuctionError(
-                    BiddingEngineAuctionError::UnknownAuction(item_id),
+                    BiddingEngineAuctionError::UnknownAuction(item_id.to_owned()),
                 )],
-            )
-        })
+            ))
+        }
     }
 
-    pub fn handle_max_bid_event(
-        item_id: ItemId,
+    pub fn handle_max_bid_limit_event(
+        item_id: ItemIdRef,
         old_state: Option<AuctionBiddingState>,
         price: Amount,
     ) -> Result<(Option<AuctionBiddingState>, Vec<BiddingEngineEvent>)> {
         let old_state = old_state.unwrap_or_else(Default::default);
 
-        let mut new_state = AuctionBiddingState {
-            max_bid_limit: price,
-            ..old_state
-        };
+        Self::handle_next_bid_decision_for_new_state(
+            item_id,
+            AuctionBiddingState {
+                max_bid_limit: price,
+                ..old_state
+            },
+        )
+    }
 
+    pub fn handle_next_bid_decision_for_new_state(
+        item_id: ItemIdRef,
+        mut new_state: AuctionBiddingState,
+    ) -> Result<(Option<AuctionBiddingState>, Vec<BiddingEngineEvent>)> {
         if let Some(our_new_bid) = new_state
             .auction_state
             .get_next_valid_bid(new_state.max_bid_limit)
         {
-            if new_state.is_bid_worth_sending(our_new_bid) {
+            if new_state.is_bid_better_than_last_bid_sent(our_new_bid) {
                 new_state.last_bid_sent = Some(our_new_bid);
 
                 Ok((
                     Some(new_state),
                     vec![BiddingEngineEvent::Bid(ItemBid {
-                        item: item_id,
+                        item: item_id.to_owned(),
                         price: our_new_bid,
                     })],
                 ))
             } else {
-                Ok((None, vec![]))
+                Ok((Some(new_state), vec![]))
             }
         } else {
-            Ok((None, vec![]))
+            Ok((Some(new_state), vec![]))
         }
     }
 }
@@ -327,19 +324,17 @@ impl service::LogFollowerService for BiddingEngine {
         let _guard = span.enter();
         debug!(?event, "event");
         Ok(match event {
-            Event::AuctionHouse(event) => Self::handle_event_with(
+            Event::AuctionHouse(event) => self.handle_auction_item_event_with(
                 transaction,
-                &self.bidding_state_store,
-                &self.even_writer,
-                event.item.clone(),
-                |old_state| Self::handle_auction_house_event(event.item, old_state, event.event),
+                &event.item,
+                event.event,
+                Self::handle_auction_house_event,
             )?,
-            Event::Ui(UiEvent::MaxBidSet(item_bid)) => Self::handle_event_with(
+            Event::Ui(UiEvent::MaxBidSet(item_bid)) => self.handle_auction_item_event_with(
                 transaction,
-                &self.bidding_state_store,
-                &self.even_writer,
-                item_bid.item.clone(),
-                |old_state| Self::handle_max_bid_event(item_bid.item, old_state, item_bid.price),
+                &item_bid.item,
+                item_bid.price,
+                Self::handle_max_bid_limit_event,
             )?,
             _ => (),
         })
