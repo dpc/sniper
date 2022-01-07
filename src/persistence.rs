@@ -78,19 +78,4 @@ impl<'borrow, 'value> Caster<'borrow, 'value> {
     pub fn as_mut<I: Tag<'value>>(self) -> Result<&'borrow mut I::Type, Error> {
         self.0.downcast_mut::<I>().ok_or_else(|| Error::WrongType)
     }
-    // pub fn new(any: &'caster mut dyn Any) -> Self {
-    //     Self(any)
-    // }
-
-    // pub unsafe fn new_transmute<'a, Ta: 'a, Tstatic: 'static>(t: &'caster mut Ta) -> Self
-    // where
-    //     'a: 'caster,
-    // {
-    //     Self(std::mem::transmute::<&'caster mut Ta, &'caster mut Tstatic>(t) as &mut dyn Any)
-    // }
-
-    // // Returns `Result` so it's easier to handle with ? than an option
-    // pub fn as_mut<T: 'static>(self) -> Result<&'caster mut T, Error> {
-    //     self.0.downcast_mut::<T>().ok_or_else(|| Error::WrongType)
-    // }
 }
