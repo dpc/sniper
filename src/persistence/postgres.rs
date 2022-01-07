@@ -7,41 +7,48 @@ pub struct PostgresPersistence {
 
 impl Persistence for PostgresPersistence {
     fn get_connection(&self) -> Result<Box<dyn Connection>> {
-        Ok(Box::new(self.pool.get()?))
+        Ok(Box::new(PostgresConnection(self.pool.get()?)))
     }
 }
 
-pub type PostgresConnection = r2d2::PooledConnection<
-    r2d2_postgres::PostgresConnectionManager<r2d2_postgres::postgres::NoTls>,
->;
+pub struct PostgresConnection(
+    pub  r2d2::PooledConnection<
+        r2d2_postgres::PostgresConnectionManager<r2d2_postgres::postgres::NoTls>,
+    >,
+);
 
+impl<'a> dyno::Tag<'a> for PostgresConnection {
+    type Type = PostgresConnection;
+}
 impl Connection for PostgresConnection {
     fn start_transaction<'a>(&'a mut self) -> Result<Box<dyn Transaction<'a> + 'a>> {
-        Ok(Box::new(self.transaction()?))
+        Ok(Box::new(PostgresTransaction(self.0.transaction()?)))
     }
 
-    fn cast<'b>(&'b mut self) -> Caster<'b> {
-        Caster::new(self)
+    fn cast<'b>(&'b mut self) -> Caster<'b, 'static> {
+        Caster::new::<PostgresConnection>(self)
     }
 }
 
-pub type PostgresTransaction<'a> = ::postgres::Transaction<'a>;
+pub struct PostgresTransaction<'a>(pub ::postgres::Transaction<'a>);
+
+impl<'a> dyno::Tag<'a> for PostgresTransaction<'static> {
+    type Type = PostgresTransaction<'a>;
+}
 
 impl<'a> Transaction<'a> for PostgresTransaction<'a> {
     fn commit(self: Box<Self>) -> Result<()> {
-        Ok((*self as ::postgres::Transaction<'a>).commit()?)
+        Ok(((self.0) as ::postgres::Transaction<'a>).commit()?)
     }
 
     fn rollback(self: Box<Self>) -> Result<()> {
-        Ok((*self as ::postgres::Transaction<'a>).rollback()?)
+        Ok(((self.0) as ::postgres::Transaction<'a>).rollback()?)
     }
 
-    fn cast<'caster>(&'caster mut self) -> Caster<'caster>
+    fn cast<'caster>(&'caster mut self) -> Caster<'caster, 'a>
     where
         'a: 'caster,
     {
-        unsafe {
-            Caster::new_transmute::<'a, PostgresTransaction<'a>, PostgresTransaction<'static>>(self)
-        }
+        Caster::new::<PostgresTransaction<'static>>(self)
     }
 }

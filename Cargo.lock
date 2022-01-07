@@ -196,6 +196,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "dyno"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5a51357b1e1c5b34b1ce5b1308dfa67cab1089e2e6f1903c83186f20c76c16a"
+
+[[package]]
 name = "fallible-iterator"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -970,6 +976,7 @@ dependencies = [
  "async-trait",
  "axum",
  "ctrlc",
+ "dyno",
  "futures",
  "parking_lot",
  "postgres",

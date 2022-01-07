@@ -16,7 +16,7 @@ impl super::BiddingStateStore for PostgresBiddingStateStore {
         item_id: crate::auction::ItemIdRef,
     ) -> anyhow::Result<Option<super::AuctionBiddingState>> {
         Ok(
-            conn.cast().as_mut::<PostgresTransaction>()?.query_opt("SELECT max_bid_limit, last_bid_sent, higest_bid_bidder, higest_bid_price, highest_bid_increment, closed FROM bidding_state WHERE item_id = $0", &[&item_id])?
+            conn.cast().as_mut::<PostgresTransaction>()?.0.query_opt("SELECT max_bid_limit, last_bid_sent, higest_bid_bidder, higest_bid_price, highest_bid_increment, closed FROM bidding_state WHERE item_id = $0", &[&item_id])?
             .map::<Result<_>, _>(|row| {
             Ok(super::AuctionBiddingState {
                 max_bid_limit: u64::try_from(row.get::<'_, _, i64>("max_bid_limit"))?,
@@ -36,7 +36,7 @@ impl super::BiddingStateStore for PostgresBiddingStateStore {
         item_id: crate::auction::ItemIdRef,
     ) -> anyhow::Result<Option<super::AuctionBiddingState>> {
         Ok(
-            conn.cast().as_mut::<PostgresConnection>()?.query_opt("SELECT max_bid_limit, last_bid_sent, higest_bid_bidder, higest_bid_price, highest_bid_increment, closed FROM bidding_state WHERE item_id = $0", &[&item_id])?
+            conn.cast().as_mut::<PostgresConnection>()?.0.query_opt("SELECT max_bid_limit, last_bid_sent, higest_bid_bidder, higest_bid_price, highest_bid_increment, closed FROM bidding_state WHERE item_id = $0", &[&item_id])?
             .map::<Result<_>, _>(|row| {
             Ok(super::AuctionBiddingState {
                 max_bid_limit: u64::try_from(row.get::<'_, _, i64>("max_bid_limit"))?,

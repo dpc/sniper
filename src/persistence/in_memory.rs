@@ -31,6 +31,10 @@ pub struct InMemoryConnection {
     lock: Arc<Mutex<()>>,
 }
 
+impl<'a> dyno::Tag<'a> for InMemoryConnection {
+    type Type = InMemoryConnection;
+}
+
 impl Connection for InMemoryConnection {
     fn start_transaction<'a>(&'a mut self) -> Result<OwnedTransaction<'a>> {
         Ok(Box::new(InMemoryTransaction {
@@ -38,14 +42,18 @@ impl Connection for InMemoryConnection {
         }))
     }
 
-    fn cast<'b>(&'b mut self) -> Caster<'b> {
-        Caster::new(self)
+    fn cast<'b>(&'b mut self) -> Caster<'b, 'static> {
+        Caster::new::<InMemoryConnection>(self)
     }
 }
 
 #[derive(Debug)]
 pub struct InMemoryTransaction<'a> {
     _lock_guard: MutexGuard<'a, ()>,
+}
+
+impl<'a> dyno::Tag<'a> for InMemoryTransaction<'static> {
+    type Type = InMemoryTransaction<'a>;
 }
 
 impl<'a> Transaction<'a> for InMemoryTransaction<'a> {
@@ -61,12 +69,10 @@ impl<'a> Transaction<'a> for InMemoryTransaction<'a> {
         bail!("Not supported")
     }
 
-    fn cast<'caster>(&'caster mut self) -> Caster<'caster>
+    fn cast<'caster>(&'caster mut self) -> Caster<'caster, 'a>
     where
         'a: 'caster,
     {
-        unsafe {
-            Caster::new_transmute::<'a, InMemoryTransaction<'a>, InMemoryTransaction<'static>>(self)
-        }
+        Caster::new::<InMemoryTransaction<'static>>(self)
     }
 }
