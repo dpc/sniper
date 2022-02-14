@@ -10,4 +10,4 @@ Features:
 
 * Services (main application logical threads/actors) with graceful shutdown on demand or error
 * Simple Event-Log-based communication.
-* Ports from the Hexagonal Architecture with support for cross-port database transactions
+* Ports&Repositories from the Hexagonal Architecture with support for cross-repository database transactions
