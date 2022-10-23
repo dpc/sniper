@@ -1,4 +1,4 @@
-//! Database persistence traitsi
+//! Database persistence traits
 //!
 //! OK, so this one is complex. Expressing atomic transactions
 //! spaning accross multiple stores/repositories in a hexagonal
