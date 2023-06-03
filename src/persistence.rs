@@ -75,7 +75,7 @@ impl<'borrow, 'value> Caster<'borrow, 'value> {
     }
 
     // Returns `Result` so it's easier to handle with ? than an option
-    pub fn as_mut<I: Tag<'value>>(self) -> Result<&'borrow mut I::Type, Error> {
+    pub fn as_mut<I: Tag<'value>>(&'borrow mut self) -> Result<&'borrow mut I::Type, Error> {
         self.0.downcast_mut::<I>().ok_or(Error::WrongType)
     }
 }

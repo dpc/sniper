@@ -32,9 +32,9 @@ impl InMemoryLog {
 }
 
 impl Reader for InMemoryLog {
-    fn read<'a>(
+    fn read(
         &self,
-        _conn: &'a mut dyn Connection,
+        _conn: &mut dyn Connection,
         offset: Offset,
         limit: usize,
         timeout: Option<Duration>,

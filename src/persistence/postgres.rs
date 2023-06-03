@@ -25,7 +25,7 @@ impl Connection for PostgresConnection {
         Ok(Box::new(PostgresTransaction(self.0.transaction()?)))
     }
 
-    fn cast<'b>(&'b mut self) -> Caster<'b, 'static> {
+    fn cast(&mut self) -> Caster<'_, 'static> {
         Caster::new::<PostgresConnection>(self)
     }
 }
