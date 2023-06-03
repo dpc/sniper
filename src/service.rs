@@ -25,16 +25,12 @@ pub type ServiceIdRef<'a> = &'a str;
 pub trait LogFollowerService: Send + Sync {
     fn get_log_progress_id(&self) -> String;
 
-    fn handle_event<'a>(
-        &mut self,
-        transaction: &mut dyn Transaction<'a>,
-        event: Event,
-    ) -> Result<()>;
+    fn handle_event(&mut self, transaction: &mut dyn Transaction<'_>, event: Event) -> Result<()>;
 }
 
 /// A service that is a loop that does something
 pub trait LoopService: Send + Sync {
-    fn run_iteration<'a>(&mut self) -> Result<()>;
+    fn run_iteration(&mut self) -> Result<()>;
 }
 
 /// Service execution control instance
@@ -164,7 +160,7 @@ impl ServiceControl {
                     data: mut events,
                 } = event_reader.read(
                     &mut *connection,
-                    progress.clone(),
+                    progress,
                     1,
                     Some(std::time::Duration::from_secs(1)),
                 )?;

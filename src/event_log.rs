@@ -25,24 +25,24 @@ pub struct WithOffset<T> {
 pub trait Reader {
     fn get_start_offset(&self) -> Result<Offset>;
 
-    fn read<'a>(
+    fn read(
         &self,
-        conn: &'a mut dyn Connection,
+        conn: &mut dyn Connection,
         offset: Offset,
         limit: usize,
         timeout: Option<Duration>,
     ) -> Result<WithOffset<Vec<LogEvent>>>;
 
-    fn read_one<'a>(
+    fn read_one(
         &self,
-        conn: &'a mut dyn Connection,
+        conn: &mut dyn Connection,
         offset: Offset,
     ) -> Result<WithOffset<Option<LogEvent>>> {
         let WithOffset { offset, data } =
             self.read(conn, offset, 1, Some(Duration::from_millis(0)))?;
         assert!(data.len() <= 1);
         Ok(WithOffset {
-            offset: offset,
+            offset,
             data: data.into_iter().next(),
         })
     }
@@ -53,7 +53,7 @@ pub trait Writer {
         self.write_tr(&mut *conn.start_transaction()?, events)
     }
 
-    fn write_tr<'a>(&self, conn: &mut dyn Transaction<'a>, events: &[Event]) -> Result<Offset>;
+    fn write_tr(&self, conn: &mut dyn Transaction<'_>, events: &[Event]) -> Result<Offset>;
 }
 
 pub type SharedReader = Arc<dyn Reader + Sync + Send + 'static>;

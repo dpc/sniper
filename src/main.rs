@@ -1,9 +1,3 @@
-// Hey, it's not too bad https://blog.rust-lang.org/2021/08/03/GATs-stabilization-push.html
-// See [persistence] module for why we need it.
-#![feature(generic_associated_types)]
-// since we're already on nightly...
-#![feature(map_first_last)]
-
 mod auction;
 mod event;
 mod event_log;
@@ -47,7 +41,7 @@ fn main() -> Result<()> {
             service::AuctionHouseSender::new(auction_house_client.clone()),
             event_reader.clone(),
         ),
-        svc_ctr.spawn_loop(service::Ui::new(persistence.clone(), event_writer.clone())?),
+        svc_ctr.spawn_loop(service::Ui::new(persistence, event_writer.clone())?),
     ] {
         handle.join()?
     }

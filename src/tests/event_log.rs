@@ -35,12 +35,7 @@ fn event_logs_sanity_check() -> Result<()> {
     let inserted_offset = event_writer.write(&mut *conn, &[Event::Test])?;
 
     assert_eq!(
-        event_reader.read(
-            &mut *conn,
-            inserted_offset.clone(),
-            1,
-            Some(Duration::from_secs(0))
-        )?,
+        event_reader.read(&mut *conn, inserted_offset, 1, Some(Duration::from_secs(0)))?,
         WithOffset {
             offset: inserted_offset,
             data: vec![]

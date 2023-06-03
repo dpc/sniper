@@ -104,7 +104,7 @@ impl Ui {
             tx.send(
                 run_http_server(persistence, even_writer)
                     .await
-                    .with_context(|| format!("Failed to run http server")),
+                    .with_context(|| "Failed to run http server".to_string()),
             )
             .expect("send to work");
         });

@@ -20,15 +20,15 @@ mod postgres;
 
 /// A store for the current state of each auction we participate in
 pub trait BiddingStateStore {
-    fn load_tr<'a>(
+    fn load_tr(
         &self,
-        conn: &mut dyn Transaction<'a>,
+        conn: &mut dyn Transaction<'_>,
         item_id: ItemIdRef,
     ) -> Result<Option<AuctionBiddingState>>;
 
-    fn store_tr<'a>(
+    fn store_tr(
         &self,
-        conn: &mut dyn Transaction<'a>,
+        conn: &mut dyn Transaction<'_>,
         item_id: ItemIdRef,
         state: AuctionBiddingState,
     ) -> Result<()>;
@@ -199,7 +199,7 @@ impl AuctionBiddingState {
     }
 }
 
-pub const BIDDING_ENGINE_SERVICE_ID: &'static str = "bidding-engine";
+pub const BIDDING_ENGINE_SERVICE_ID: &str = "bidding-engine";
 
 pub struct BiddingEngine {
     bidding_state_store: SharedBiddingStateStore,
@@ -217,9 +217,9 @@ impl BiddingEngine {
         }
     }
 
-    fn handle_auction_item_event_with<'a, T>(
+    fn handle_auction_item_event_with<T>(
         &self,
-        transaction: &mut dyn Transaction<'a>,
+        transaction: &mut dyn Transaction<'_>,
         item_id: ItemIdRef,
         data: T,
         f: impl FnOnce(
@@ -228,7 +228,7 @@ impl BiddingEngine {
             T,
         ) -> Result<(Option<AuctionBiddingState>, Vec<BiddingEngineEvent>)>,
     ) -> Result<()> {
-        let old_auction_state = self.bidding_state_store.load_tr(transaction, &item_id)?;
+        let old_auction_state = self.bidding_state_store.load_tr(transaction, item_id)?;
 
         let (new_auction_state, events) = f(item_id, old_auction_state, data)?;
 
@@ -244,7 +244,7 @@ impl BiddingEngine {
             transaction,
             &events
                 .into_iter()
-                .map(|e| Event::BiddingEngine(e))
+                .map(Event::BiddingEngine)
                 .collect::<Vec<_>>(),
         )?;
 
@@ -276,7 +276,7 @@ impl BiddingEngine {
         old_state: Option<AuctionBiddingState>,
         price: Amount,
     ) -> Result<(Option<AuctionBiddingState>, Vec<BiddingEngineEvent>)> {
-        let old_state = old_state.unwrap_or_else(Default::default);
+        let old_state = old_state.unwrap_or_default();
 
         Self::handle_next_bid_decision_for_new_state(
             item_id,
@@ -315,15 +315,11 @@ impl BiddingEngine {
 }
 
 impl service::LogFollowerService for BiddingEngine {
-    fn handle_event<'a>(
-        &mut self,
-        transaction: &mut dyn Transaction<'a>,
-        event: Event,
-    ) -> Result<()> {
+    fn handle_event(&mut self, transaction: &mut dyn Transaction<'_>, event: Event) -> Result<()> {
         let span = span!(Level::DEBUG, "bidding engine - handle event");
         let _guard = span.enter();
         debug!(?event, "event");
-        Ok(match event {
+        match event {
             Event::AuctionHouse(event) => self.handle_auction_item_event_with(
                 transaction,
                 &event.item,
@@ -337,7 +333,8 @@ impl service::LogFollowerService for BiddingEngine {
                 Self::handle_max_bid_limit_event,
             )?,
             _ => (),
-        })
+        };
+        Ok(())
     }
 
     fn get_log_progress_id(&self) -> String {
