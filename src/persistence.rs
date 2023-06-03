@@ -31,9 +31,9 @@ pub trait Persistence: Send + Sync {
 pub type SharedPersistence = Arc<dyn Persistence>;
 
 pub trait Connection: Any {
-    fn start_transaction<'a>(&'a mut self) -> Result<OwnedTransaction<'a>>;
+    fn start_transaction(&mut self) -> Result<OwnedTransaction<'_>>;
 
-    fn cast<'borrow>(&'borrow mut self) -> Caster<'borrow, 'static>;
+    fn cast(&mut self) -> Caster<'_, 'static>;
 }
 
 pub type OwnedConnection = Box<dyn Connection>;
@@ -75,7 +75,7 @@ impl<'borrow, 'value> Caster<'borrow, 'value> {
     }
 
     // Returns `Result` so it's easier to handle with ? than an option
-    pub fn as_mut<I: Tag<'value>>(self) -> Result<&'borrow mut I::Type, Error> {
-        self.0.downcast_mut::<I>().ok_or_else(|| Error::WrongType)
+    pub fn as_mut<I: Tag<'value>>(&'borrow mut self) -> Result<&'borrow mut I::Type, Error> {
+        self.0.downcast_mut::<I>().ok_or(Error::WrongType)
     }
 }

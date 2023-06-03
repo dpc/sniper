@@ -36,13 +36,13 @@ impl<'a> dyno::Tag<'a> for InMemoryConnection {
 }
 
 impl Connection for InMemoryConnection {
-    fn start_transaction<'a>(&'a mut self) -> Result<OwnedTransaction<'a>> {
+    fn start_transaction(&mut self) -> Result<OwnedTransaction<'_>> {
         Ok(Box::new(InMemoryTransaction {
             _lock_guard: futures::executor::block_on(self.lock.lock()),
         }))
     }
 
-    fn cast<'b>(&'b mut self) -> Caster<'b, 'static> {
+    fn cast(&mut self) -> Caster<'_, 'static> {
         Caster::new::<InMemoryConnection>(self)
     }
 }

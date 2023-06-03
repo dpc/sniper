@@ -16,17 +16,13 @@ use anyhow::Result;
 pub trait ProgressTracker {
     fn load(&self, conn: &mut dyn Connection, id: ServiceIdRef) -> Result<Option<Offset>>;
 
-    fn store_tr<'a>(
+    fn store_tr(
         &self,
-        conn: &mut dyn Transaction<'a>,
+        conn: &mut dyn Transaction<'_>,
         id: ServiceIdRef,
         offset: Offset,
     ) -> Result<()>;
-    fn load_tr<'a>(
-        &self,
-        conn: &mut dyn Transaction<'a>,
-        id: ServiceIdRef,
-    ) -> Result<Option<Offset>>;
+    fn load_tr(&self, conn: &mut dyn Transaction<'_>, id: ServiceIdRef) -> Result<Option<Offset>>;
 }
 
 pub type SharedProgressTracker = Arc<dyn ProgressTracker + Send + Sync + 'static>;

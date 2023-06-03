@@ -2,6 +2,7 @@
 name = "sniper"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.68.2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -15,12 +16,12 @@ postgres = "*"
 r2d2 = "*"
 r2d2_postgres = "*"
 
-axum = "0.4"
-tokio = { version="1.11", features=["rt", "rt-multi-thread"] }
+axum = "0.6"
+tokio = { version = "1.28", features = ["rt", "rt-multi-thread"] }
 async-trait = "*"
-futures = { version = "*", features = [ "async-await" ] }
-async-condvar-fair = { version = "*", features = [ "tokio" ] }
+futures = { version = "*", features = ["async-await"] }
+async-condvar-fair = { version = "*", features = ["tokio"] }
 tracing = "0.1"
-tracing-subscriber= "0.2"
+tracing-subscriber = "0.3"
 serde = { version = "*", features = ["derive"] }
 dyno = "*"
